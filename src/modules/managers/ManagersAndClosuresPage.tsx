@@ -58,7 +58,7 @@ export const ManagersAndClosuresPage: React.FC = () => {
   ) || [];
 
   const members = useLiveQuery(() => db.members.toArray()) || [];
-  const meals = useLiveQuery(() => db.meals.where('month').equals(selectedMonth).toArray(), [selectedMonth]) || [];
+  const meals = useLiveQuery(() => db.mealEntries.where('month').equals(selectedMonth).toArray(), [selectedMonth]) || [];
   const expenses = useLiveQuery(() => db.expenses.where('month').equals(selectedMonth).toArray(), [selectedMonth]) || [];
   const deposits = useLiveQuery(() => db.deposits.where('month').equals(selectedMonth).toArray(), [selectedMonth]) || [];
 
@@ -202,29 +202,29 @@ export const ManagersAndClosuresPage: React.FC = () => {
               title="Active Manager(s)"
               value={activeManagers.map((m) => m.name).join(', ') || 'None'}
               subtitle={`${activeManagers.length} currently assigned`}
-              icon={UserCheck}
-              variant="default"
+              icon={<UserCheck className="w-5 h-5 text-emerald-600" />}
+              iconBgColor="bg-emerald-50"
             />
             <StatCard
               title="Total Managers Logged"
               value={managers.length}
               subtitle="All historical periods"
-              icon={Users}
-              variant="default"
+              icon={<Users className="w-5 h-5 text-indigo-600" />}
+              iconBgColor="bg-indigo-50"
             />
             <StatCard
               title="Meals Served (This Month)"
               value={overview.totalMeals}
               subtitle="Across active manager dates"
-              icon={Calendar}
-              variant="default"
+              icon={<Calendar className="w-5 h-5 text-teal-600" />}
+              iconBgColor="bg-teal-50"
             />
             <StatCard
               title="Total Manager Fee"
               value={formatCurrency(overview.totalManagerFees)}
               subtitle={`Option A: Actual Meals × ৳${settings.managerFeePerMeal}`}
-              icon={ShieldCheck}
-              variant="warning"
+              icon={<ShieldCheck className="w-5 h-5 text-amber-600" />}
+              iconBgColor="bg-amber-50"
             />
           </div>
 
@@ -466,29 +466,29 @@ export const ManagersAndClosuresPage: React.FC = () => {
               title="Month Days"
               value={`${daysInMonth} Days`}
               subtitle={`Total days in ${selectedMonth}`}
-              icon={Calendar}
-              variant="default"
+              icon={<Calendar className="w-5 h-5 text-slate-700" />}
+              iconBgColor="bg-slate-100"
             />
             <StatCard
               title="Full Meal OFF / Closures"
               value={`${fullOffCount} Days`}
               subtitle="All meals set to 0"
-              icon={CalendarOff}
-              variant="danger"
+              icon={<CalendarOff className="w-5 h-5 text-rose-600" />}
+              iconBgColor="bg-rose-50"
             />
             <StatCard
               title="Regular Dining Days"
               value={`${regularDaysCount} Days`}
               subtitle="Normal dining active"
-              icon={CheckCircle}
-              variant="success"
+              icon={<CheckCircle className="w-5 h-5 text-emerald-600" />}
+              iconBgColor="bg-emerald-50"
             />
             <StatCard
               title="Monthly Actual Meals"
               value={overview.totalMeals}
               subtitle="Excluding all FULL OFF days"
-              icon={ShieldCheck}
-              variant="default"
+              icon={<ShieldCheck className="w-5 h-5 text-blue-600" />}
+              iconBgColor="bg-blue-50"
             />
           </div>
 

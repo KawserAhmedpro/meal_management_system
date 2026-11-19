@@ -23,6 +23,20 @@ export const StatCard: React.FC<StatCardProps> = ({
   trend,
   onClick,
 }) => {
+  const renderIcon = () => {
+    if (React.isValidElement(icon)) {
+      return icon;
+    }
+    if (
+      typeof icon === 'function' ||
+      (typeof icon === 'object' && icon !== null && ('render' in icon || '$$typeof' in icon))
+    ) {
+      const IconComponent = icon as React.ComponentType<{ className?: string }>;
+      return <IconComponent className="w-5 h-5" />;
+    }
+    return null;
+  };
+
   return (
     <Card
       onClick={onClick}
@@ -39,7 +53,7 @@ export const StatCard: React.FC<StatCardProps> = ({
           </div>
         </div>
         <div className={`p-2.5 rounded-xl ${iconBgColor} shrink-0`}>
-          {icon}
+          {renderIcon()}
         </div>
       </div>
 
