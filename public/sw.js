@@ -1,16 +1,18 @@
 const CACHE_NAME = 'meal-sys-v1';
-const STATIC_ASSETS = [
-  '/',
-  '/index.html',
-  '/manifest.json',
-  '/logo.svg',
-];
 
-// Install event - Cache static assets
+// Install event - Cache static assets using current service worker scope
 self.addEventListener('install', (event) => {
+  const scope = self.registration.scope;
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(STATIC_ASSETS);
+      return cache.addAll([
+        scope,
+        `${scope}index.html`,
+        `${scope}manifest.json`,
+        `${scope}logo.svg`,
+      ]).catch((err) => {
+        console.warn('SW initial cache warning (non-fatal):', err);
+      });
     })
   );
   self.skipWaiting();
@@ -35,6 +37,7 @@ self.addEventListener('activate', (event) => {
 // Fetch event - Cache-first with network fallback
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
+  const scope = self.registration.scope;
   event.respondWith(
     caches.match(event.request).then((cachedResponse) => {
       if (cachedResponse) {
@@ -52,7 +55,7 @@ self.addEventListener('fetch', (event) => {
       }).catch(() => {
         // Offline fallback
         if (event.request.headers.get('accept')?.includes('text/html')) {
-          return caches.match('/index.html');
+          return caches.match(`${scope}index.html`) || caches.match(scope);
         }
       });
     })

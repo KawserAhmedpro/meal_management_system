@@ -4,10 +4,11 @@ import App from './App';
 import './index.css';
 
 // Register service worker for offline PWA functionality
-if ('serviceWorker' in navigator && process.env.NODE_ENV === 'production') {
+if ('serviceWorker' in navigator && import.meta.env.PROD) {
   window.addEventListener('load', () => {
+    const swUrl = `${import.meta.env.BASE_URL}sw.js`;
     navigator.serviceWorker
-      .register('/sw.js')
+      .register(swUrl)
       .then((reg) => console.log('ServiceWorker registered:', reg.scope))
       .catch((err) => console.log('ServiceWorker registration failed:', err));
   });

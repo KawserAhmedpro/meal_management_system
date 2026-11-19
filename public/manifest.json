@@ -2,13 +2,13 @@
   "name": "MEAL MANAGEMENT SYSTEM",
   "short_name": "MessMeal",
   "description": "Local-First Mess and Meal Management System",
-  "start_url": "/",
+  "start_url": "./",
   "display": "standalone",
   "background_color": "#0f172a",
   "theme_color": "#0f172a",
   "icons": [
     {
-      "src": "/logo.svg",
+      "src": "logo.svg",
       "sizes": "192x192 512x512",
       "type": "image/svg+xml"
     }
