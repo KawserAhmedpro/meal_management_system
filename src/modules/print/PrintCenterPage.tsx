@@ -131,12 +131,12 @@ export const PrintCenterPage: React.FC = () => {
             {settings.institutionName || 'Mymensingh Engineering College'}
           </h1>
           <h2 className="text-sm sm:text-base font-bold text-slate-700 mt-0.5">
-            {settings.hallName || 'Omar Ekushe Hall'} (Mess Meal) [Sultan + Robiul]
+            {settings.hallName || 'Omar Ekushe Hall'} (Mess Meal) — Manager: {settings.managerName || 'Manager'}
           </h2>
           <div className="flex items-center justify-between text-xs font-semibold text-slate-600 mt-2 px-2">
             <span>Month: <strong>{formatMonthName(selectedMonth)}</strong></span>
             <span>Date: <strong>{formatDate(printDate)}</strong></span>
-            <span>Meal Cycle: <strong>Lunch & Dinner</strong></span>
+            <span>Manager: <strong>{settings.managerName || 'Manager'}</strong></span>
           </div>
         </div>
 
@@ -221,8 +221,8 @@ export const PrintCenterPage: React.FC = () => {
         {/* Footer / Signatures on Print */}
         <div className="mt-12 pt-6 border-t border-slate-300 flex items-end justify-between text-xs text-slate-600">
           <div>
-            <div className="w-36 border-b border-slate-700 mb-1" />
-            <span>Hall Manager Signature</span>
+            <div className="w-44 border-b border-slate-700 mb-1" />
+            <span>Manager: {settings.managerName || 'Manager'} (Signature)</span>
           </div>
 
           <div className="text-center font-bold text-slate-800">

@@ -42,23 +42,41 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const liveSettings = useLiveQuery(() => db.settings.get('app_settings'), []);
   const settings: SystemSettings = liveSettings || DEFAULT_SETTINGS;
 
+  const initialLockChecked = React.useRef(false);
+
   // Initialize selectedMonth and lock state from settings
   useEffect(() => {
     if (settings.selectedMonth && selectedMonth === '2026-03' && settings.selectedMonth !== '2026-03') {
       setSelectedMonthState(settings.selectedMonth);
     }
-    if (settings.pinLockEnabled && settings.pinCode) {
-      setIsPinLocked(true);
+    
+    // Only lock on initial application load if PIN lock is enabled
+    if (!initialLockChecked.current) {
+      if (settings.pinLockEnabled && settings.pinCode && settings.pinCode.trim().length > 0) {
+        setIsPinLocked(true);
+      }
+      initialLockChecked.current = true;
+    } else {
+      // If PIN lock is disabled in settings, ensure app is unlocked
+      if (!settings.pinLockEnabled) {
+        setIsPinLocked(false);
+      }
     }
   }, [settings.selectedMonth, settings.pinLockEnabled, settings.pinCode]);
 
   const setSelectedMonth = async (month: string) => {
     setSelectedMonthState(month);
-    await db.settings.update('app_settings', { selectedMonth: month });
+    const current = (await db.settings.get('app_settings')) || DEFAULT_SETTINGS;
+    await db.settings.put({ ...current, selectedMonth: month, id: 'app_settings' });
   };
 
   const updateSettings = async (newSettings: Partial<SystemSettings>) => {
-    await db.settings.update('app_settings', newSettings);
+    const current = (await db.settings.get('app_settings')) || DEFAULT_SETTINGS;
+    await db.settings.put({
+      ...current,
+      ...newSettings,
+      id: 'app_settings',
+    });
   };
 
   const unlockWithPin = (enteredPin: string): boolean => {

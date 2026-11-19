@@ -56,6 +56,7 @@ export interface Category {
 
 export interface SystemSettings {
   id: string; // "app_settings"
+  managerName: string;
   messName: string;
   institutionName: string;
   hallName: string;

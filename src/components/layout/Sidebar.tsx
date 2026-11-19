@@ -59,7 +59,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
             </div>
             <div className="overflow-hidden">
               <h1 className="text-sm font-bold text-white tracking-wide truncate">
-                {settings.messName || 'MEAL SYSTEM'}
+                {settings.managerName ? `${settings.managerName}'s Mess` : (settings.messName || 'MEAL SYSTEM')}
               </h1>
               <p className="text-[11px] font-medium text-emerald-400 truncate">
                 {settings.hallName || 'Omar Ekushe Hall'}

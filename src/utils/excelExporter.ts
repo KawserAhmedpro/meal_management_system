@@ -26,6 +26,7 @@ export function exportMonthToExcel(
     ['MEAL MANAGEMENT SYSTEM - MONTHLY FINANCIAL SUMMARY'],
     ['Institution:', settings.institutionName],
     ['Hall / Mess:', settings.hallName, settings.messName],
+    ['Manager:', settings.managerName || 'Manager'],
     ['Month:', month],
     ['Generated On:', new Date().toLocaleString()],
     [],

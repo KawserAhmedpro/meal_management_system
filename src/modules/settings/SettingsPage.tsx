@@ -20,6 +20,7 @@ import { db } from '../../db';
 import { DEFAULT_SETTINGS } from '../../db/seedData';
 
 interface SettingsFormValues {
+  managerName: string;
   messName: string;
   institutionName: string;
   hallName: string;
@@ -45,9 +46,10 @@ export const SettingsPage: React.FC = () => {
     formState: { isSubmitting },
   } = useForm<SettingsFormValues>({
     defaultValues: {
-      messName: settings.messName,
-      institutionName: settings.institutionName,
-      hallName: settings.hallName,
+      managerName: settings.managerName || 'Ratul',
+      messName: settings.messName || 'Omar Ekushe Hall Mess',
+      institutionName: settings.institutionName || 'Mymensingh Engineering College',
+      hallName: settings.hallName || 'Omar Ekushe Hall',
       currency: settings.currency || 'BDT',
       currencySymbol: settings.currencySymbol || '৳',
       managerFeePerMeal: settings.managerFeePerMeal || 5,
@@ -59,16 +61,40 @@ export const SettingsPage: React.FC = () => {
     },
   });
 
+  // Sync form values if settings load asynchronously from IndexedDB
+  React.useEffect(() => {
+    if (settings) {
+      reset({
+        managerName: settings.managerName || 'Ratul',
+        messName: settings.messName || 'Omar Ekushe Hall Mess',
+        institutionName: settings.institutionName || 'Mymensingh Engineering College',
+        hallName: settings.hallName || 'Omar Ekushe Hall',
+        currency: settings.currency || 'BDT',
+        currencySymbol: settings.currencySymbol || '৳',
+        managerFeePerMeal: settings.managerFeePerMeal || 5,
+        theme: settings.theme || 'light',
+        dateFormat: settings.dateFormat || 'yyyy-MM-dd',
+        pinLockEnabled: settings.pinLockEnabled || false,
+        pinCode: settings.pinCode || '',
+        reminderDays: settings.reminderDays || 7,
+      });
+    }
+  }, [settings, reset]);
+
   const isPinEnabled = watch('pinLockEnabled');
 
   const onSubmit = async (data: SettingsFormValues) => {
-    await updateSettings({
-      ...data,
-      managerFeePerMeal: Number(data.managerFeePerMeal),
-      reminderDays: Number(data.reminderDays),
-    });
-    setSuccessNotice(true);
-    setTimeout(() => setSuccessNotice(false), 3000);
+    try {
+      await updateSettings({
+        ...data,
+        managerFeePerMeal: Number(data.managerFeePerMeal) || 5,
+        reminderDays: Number(data.reminderDays) || 7,
+      });
+      setSuccessNotice(true);
+      setTimeout(() => setSuccessNotice(false), 3000);
+    } catch (err) {
+      console.error('Failed to save settings:', err);
+    }
   };
 
   const handleResetDefaults = async () => {
@@ -106,10 +132,22 @@ export const SettingsPage: React.FC = () => {
         {/* Section 1: Mess & Institution Details */}
         <Card>
           <CardHeader
-            title="Mess & Institution Profile"
+            title="Mess & Manager Profile"
             subtitle="Details displayed on printable meal sheets, headers, and reports"
           />
           <CardContent className="space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <Input
+                label="Manager Name *"
+                placeholder="e.g. Ratul"
+                {...register('managerName', { required: 'Manager name is required' })}
+              />
+              <Input
+                label="Hall Name *"
+                placeholder="e.g. Omar Ekushe Hall"
+                {...register('hallName')}
+              />
+            </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <Input
                 label="Institution Name"
@@ -117,16 +155,11 @@ export const SettingsPage: React.FC = () => {
                 {...register('institutionName')}
               />
               <Input
-                label="Hall Name"
-                placeholder="e.g. Omar Ekushe Hall"
-                {...register('hallName')}
+                label="Mess / Batch Name"
+                placeholder="e.g. Omar Ekushe Hall Mess"
+                {...register('messName')}
               />
             </div>
-            <Input
-              label="Mess Name / Managers"
-              placeholder="e.g. Omar Ekushe Hall Mess [Sultan + Robiul]"
-              {...register('messName')}
-            />
           </CardContent>
         </Card>
 

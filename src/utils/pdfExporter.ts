@@ -19,7 +19,7 @@ export function exportTableToPdf(
 
   doc.setFontSize(11);
   doc.setFont('helvetica', 'normal');
-  doc.text(`${settings.hallName || 'Omar Ekushe Hall'} — ${settings.messName || 'Mess Management'}`, 40, 56);
+  doc.text(`${settings.hallName || 'Omar Ekushe Hall'} (Mess Meal) — Manager: ${settings.managerName || 'Manager'}`, 40, 56);
 
   doc.setFontSize(12);
   doc.setFont('helvetica', 'bold');

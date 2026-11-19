@@ -165,12 +165,14 @@ export const TopNav: React.FC<TopNavProps> = ({ onToggleSidebar }) => {
 
         {/* Admin profile pill */}
         <div className="flex items-center gap-2 pl-2 border-l border-slate-200">
-          <div className="w-8 h-8 rounded-full bg-slate-800 text-white flex items-center justify-center text-xs font-bold">
-            AD
+          <div className="w-8 h-8 rounded-full bg-emerald-600 text-white flex items-center justify-center text-xs font-bold shadow-sm">
+            {(settings.managerName || 'Manager').substring(0, 2).toUpperCase()}
           </div>
           <div className="hidden lg:block text-left text-xs leading-tight">
-            <span className="font-bold text-slate-800 block">Manager</span>
-            <span className="text-[10px] text-slate-500">Admin</span>
+            <span className="font-bold text-slate-800 block truncate max-w-[120px]">
+              {settings.managerName || 'Manager'}
+            </span>
+            <span className="text-[10px] text-slate-500">Mess Manager</span>
           </div>
         </div>
       </div>

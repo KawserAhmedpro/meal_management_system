@@ -13,6 +13,7 @@ export const DEFAULT_CATEGORIES: Category[] = [
 
 export const DEFAULT_SETTINGS: SystemSettings = {
   id: 'app_settings',
+  managerName: 'Ratul',
   messName: 'Omar Ekushe Hall Mess',
   institutionName: 'Mymensingh Engineering College',
   hallName: 'Omar Ekushe Hall',

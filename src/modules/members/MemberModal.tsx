@@ -158,7 +158,7 @@ export const MemberModal: React.FC<MemberModalProps> = ({
 
         <Input
           label="Notes / Designation (Optional)"
-          placeholder="e.g. Sultan + Robiul / Room leader"
+          placeholder="e.g. Room leader / Student"
           {...register('notes')}
         />
 

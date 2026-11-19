@@ -57,7 +57,7 @@ export const DashboardPage: React.FC = () => {
               <span>{settings.institutionName || 'Mymensingh Engineering College'}</span>
             </div>
             <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white">
-              {settings.hallName || 'Omar Ekushe Hall'} — {settings.messName || 'Mess Management'}
+              {settings.hallName || 'Omar Ekushe Hall'} — Manager: {settings.managerName || 'Manager'}
             </h2>
             <p className="text-slate-300 text-xs sm:text-sm mt-1 max-w-xl flex items-center gap-2">
               <MapPin className="w-3.5 h-3.5 text-slate-400" />
