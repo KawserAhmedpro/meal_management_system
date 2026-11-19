@@ -58,6 +58,7 @@ export const DepositModal: React.FC<DepositModalProps> = ({
   const selectedMemberId = watch('memberId');
 
   useEffect(() => {
+    if (!isOpen) return;
     if (depositToEdit) {
       reset({
         memberId: depositToEdit.memberId,
@@ -75,7 +76,7 @@ export const DepositModal: React.FC<DepositModalProps> = ({
         note: '',
       });
     }
-  }, [depositToEdit, defaultMemberId, reset, isOpen, selectedMonth, members]);
+  }, [isOpen, depositToEdit, defaultMemberId, selectedMonth]);
 
   const filteredMembers = members.filter(
     (m) =>

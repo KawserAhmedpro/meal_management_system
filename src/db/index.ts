@@ -68,8 +68,8 @@ export async function initializeDatabase(): Promise<void> {
         'rw',
         [db.members, db.categories, db.settings, db.managers],
         async () => {
-          await db.members.bulkAdd(membersToInsert);
-          await db.categories.bulkAdd(DEFAULT_CATEGORIES);
+          await db.members.bulkPut(membersToInsert);
+          await db.categories.bulkPut(DEFAULT_CATEGORIES);
           await db.settings.put(DEFAULT_SETTINGS);
           // Initial manager
           await db.managers.put({
@@ -93,7 +93,7 @@ export async function initializeDatabase(): Promise<void> {
       }
       const catCount = await db.categories.count();
       if (catCount === 0) {
-        await db.categories.bulkAdd(DEFAULT_CATEGORIES);
+        await db.categories.bulkPut(DEFAULT_CATEGORIES);
       }
       // Ensure at least one manager exists
       const mgrCount = await db.managers.count();

@@ -59,25 +59,33 @@ export const Layout: React.FC = () => {
       </div>
 
       {/* Quick Action Modals */}
-      <DailyMealQuickModal
-        isOpen={activeQuickModal === 'meal'}
-        onClose={() => setActiveQuickModal(null)}
-      />
+      {activeQuickModal === 'meal' && (
+        <DailyMealQuickModal
+          isOpen={true}
+          onClose={() => setActiveQuickModal(null)}
+        />
+      )}
 
-      <ExpenseModal
-        isOpen={activeQuickModal === 'expense'}
-        onClose={() => setActiveQuickModal(null)}
-      />
+      {activeQuickModal === 'expense' && (
+        <ExpenseModal
+          isOpen={true}
+          onClose={() => setActiveQuickModal(null)}
+        />
+      )}
 
-      <DepositModal
-        isOpen={activeQuickModal === 'deposit'}
-        onClose={() => setActiveQuickModal(null)}
-      />
+      {activeQuickModal === 'deposit' && (
+        <DepositModal
+          isOpen={true}
+          onClose={() => setActiveQuickModal(null)}
+        />
+      )}
 
-      <MemberModal
-        isOpen={activeQuickModal === 'member'}
-        onClose={() => setActiveQuickModal(null)}
-      />
+      {activeQuickModal === 'member' && (
+        <MemberModal
+          isOpen={true}
+          onClose={() => setActiveQuickModal(null)}
+        />
+      )}
     </div>
   );
 };

@@ -48,6 +48,7 @@ export const MemberModal: React.FC<MemberModalProps> = ({
   });
 
   useEffect(() => {
+    if (!isOpen) return;
     if (memberToEdit) {
       reset({
         name: memberToEdit.name,
@@ -69,7 +70,7 @@ export const MemberModal: React.FC<MemberModalProps> = ({
         notes: '',
       });
     }
-  }, [memberToEdit, reset, isOpen]);
+  }, [isOpen, memberToEdit]);
 
   const onSubmit = async (data: FormValues) => {
     const now = Date.now();

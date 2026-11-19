@@ -58,6 +58,7 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
   const selectedCategoryVal = watch('category');
 
   useEffect(() => {
+    if (!isOpen) return;
     if (expenseToEdit) {
       reset({
         date: expenseToEdit.date,
@@ -75,7 +76,7 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
         notes: '',
       });
     }
-  }, [expenseToEdit, reset, isOpen, selectedMonth]);
+  }, [isOpen, expenseToEdit, selectedMonth]);
 
   const handleAddCustomCategory = async () => {
     if (!customCategory.trim()) return;
