@@ -61,9 +61,11 @@ export const SettingsPage: React.FC = () => {
     },
   });
 
-  // Sync form values if settings load asynchronously from IndexedDB
+  const hasInitialized = React.useRef(false);
+
+  // Sync form values on initial load when settings load from IndexedDB
   React.useEffect(() => {
-    if (settings) {
+    if (settings && !hasInitialized.current) {
       reset({
         managerName: settings.managerName || 'Ratul',
         messName: settings.messName || 'Omar Ekushe Hall Mess',
@@ -78,6 +80,7 @@ export const SettingsPage: React.FC = () => {
         pinCode: settings.pinCode || '',
         reminderDays: settings.reminderDays || 7,
       });
+      hasInitialized.current = true;
     }
   }, [settings, reset]);
 
@@ -121,12 +124,12 @@ export const SettingsPage: React.FC = () => {
         </p>
       </div>
 
-      {successNotice && (
-        <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold flex items-center gap-2">
-          <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-          Settings successfully saved and applied!
+      {successNotice ? (
+        <div key="success-notice" className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold flex items-center gap-2">
+          <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+          <span>Settings successfully saved and applied!</span>
         </div>
-      )}
+      ) : null}
 
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
         {/* Section 1: Mess & Institution Details */}
