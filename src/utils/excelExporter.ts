@@ -1,5 +1,5 @@
 import * as XLSX from 'xlsx';
-import { Member, MealEntry, Expense, Deposit, SystemSettings } from '../types';
+import { Member, MealEntry, Expense, Deposit, SystemSettings, DailyMealClosure, ManagerPeriod } from '../types';
 import { calculateMonthSummary } from './calculations';
 
 export function exportMonthToExcel(
@@ -8,7 +8,9 @@ export function exportMonthToExcel(
   mealEntries: MealEntry[],
   expenses: Expense[],
   deposits: Deposit[],
-  settings: SystemSettings
+  settings: SystemSettings,
+  dailyClosures: DailyMealClosure[] = [],
+  managers: ManagerPeriod[] = []
 ) {
   const wb = XLSX.utils.book_new();
 
@@ -18,7 +20,9 @@ export function exportMonthToExcel(
     mealEntries,
     expenses,
     deposits,
-    settings.managerFeePerMeal || 5
+    settings.managerFeePerMeal || 5,
+    dailyClosures,
+    managers
   );
 
   // Sheet 1: Monthly Summary
@@ -139,6 +143,43 @@ export function exportMonthToExcel(
   ]);
   const wsMembers = XLSX.utils.aoa_to_sheet([memHeaders, ...memRows]);
   XLSX.utils.book_append_sheet(wb, wsMembers, 'Members');
+
+  // Sheet 7: Manager Fees (Option A)
+  const mgrHeaders = [
+    'Manager Name',
+    'Phone',
+    'Start Date',
+    'Resignation Date',
+    'Status',
+    'Active Period in Month',
+    'Active Days',
+    'Actual Meals Served',
+    'Fee Rate (৳/meal)',
+    'Earned Fee (৳)',
+  ];
+  const mgrRows = overview.managerCalculations.map((c) => [
+    c.manager.name,
+    c.manager.phone || '',
+    c.manager.startDate,
+    c.manager.endDate || 'Active (Present)',
+    c.manager.status,
+    `${c.activeStartDate} to ${c.activeEndDate}`,
+    c.activeDaysCount,
+    c.mealsServed,
+    c.ratePerMeal,
+    c.feeAmount,
+  ]);
+  const wsManagers = XLSX.utils.aoa_to_sheet([mgrHeaders, ...mgrRows]);
+  XLSX.utils.book_append_sheet(wb, wsManagers, 'Manager History & Fees');
+
+  // Sheet 8: Daily Closures & Holidays
+  const closureHeaders = ['Date', 'Month', 'Status', 'Reason / Holiday'];
+  const closureRows = dailyClosures
+    .filter((c) => c.month === month)
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .map((c) => [c.date, c.month, c.status, c.reason || 'Mess Closed']);
+  const wsClosures = XLSX.utils.aoa_to_sheet([closureHeaders, ...closureRows]);
+  XLSX.utils.book_append_sheet(wb, wsClosures, 'Closures & Holidays');
 
   // Write file
   XLSX.writeFile(wb, `MEAL_MANAGEMENT_${month}.xlsx`);

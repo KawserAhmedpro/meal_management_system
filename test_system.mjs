@@ -216,6 +216,191 @@ assert(seedMembersJson[0].name === 'ashik' && seedMembersJson[0].room === 'ROOM-
 const room00Members = seedMembersJson.filter(m => m.room === 'ROOM-00');
 assert(room00Members.length === 6, 'ROOM-00 has 6 members preserved (Jakir, Mehedi, etc.)');
 
+// -------------------------------------------------------------
+// TEST 4: Dynamic Manager Assignment (Option A) & Daily Closures
+// -------------------------------------------------------------
+console.log('\nTest Group 4: Dynamic Manager History (Option A) & Daily Meal ON/OFF');
+
+function calculateDynamicMonthSummary(
+  month,
+  members,
+  mealEntries,
+  expenses,
+  deposits,
+  defaultManagerFeeRate = 5,
+  dailyClosures = [],
+  managers = []
+) {
+  const [yearStr, monthStr] = month.split('-');
+  const year = parseInt(yearStr);
+  const monthNum = parseInt(monthStr);
+  const daysInMonth = new Date(year, monthNum, 0).getDate();
+
+  const monthMeals = mealEntries.filter((m) => m.month === month);
+  const monthExpenses = expenses.filter((e) => e.month === month);
+  const monthDeposits = deposits.filter((d) => d.month === month);
+  const monthClosures = dailyClosures.filter((c) => c.month === month);
+
+  const fullOffDateSet = new Set();
+  for (const c of monthClosures) {
+    if (c.status === 'FULL_OFF') {
+      fullOffDateSet.add(c.date);
+    }
+  }
+
+  const memberDailyMeals = new Map();
+  const dateTotalEffectiveMeals = new Map();
+
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dayStr = String(d).padStart(2, '0');
+    const dateStr = `${month}-${dayStr}`;
+    dateTotalEffectiveMeals.set(dateStr, 0);
+  }
+
+  let totalMeals = 0;
+
+  for (const entry of monthMeals) {
+    const isOff = fullOffDateSet.has(entry.date);
+    const raw = entry.count || 0;
+    const effective = isOff ? 0 : raw;
+
+    memberDailyMeals.set(`${entry.memberId}_${entry.date}`, { raw, effective });
+
+    const curDayTotal = dateTotalEffectiveMeals.get(entry.date) || 0;
+    dateTotalEffectiveMeals.set(entry.date, curDayTotal + effective);
+    totalMeals += effective;
+  }
+
+  const totalExpenses = monthExpenses.reduce((sum, exp) => sum + (exp.amount || 0), 0);
+  const mealRate = totalMeals > 0 ? totalExpenses / totalMeals : 0;
+
+  function isManagerActiveOnDate(manager, date) {
+    if (manager.startDate > date) return false;
+    if (manager.endDate && manager.endDate < date) return false;
+    return true;
+  }
+
+  const managerCalculations = [];
+  let totalMessManagerFees = 0;
+
+  for (const mgr of managers) {
+    let mealsServedForManager = 0;
+    let activeDaysCount = 0;
+    let earliestActiveInMonth = '';
+    let latestActiveInMonth = '';
+    const rate = mgr.feeRateOverride !== undefined ? mgr.feeRateOverride : defaultManagerFeeRate;
+
+    for (let d = 1; d <= daysInMonth; d++) {
+      const dayStr = String(d).padStart(2, '0');
+      const dateStr = `${month}-${dayStr}`;
+
+      if (isManagerActiveOnDate(mgr, dateStr)) {
+        if (!earliestActiveInMonth) earliestActiveInMonth = dateStr;
+        latestActiveInMonth = dateStr;
+        activeDaysCount++;
+
+        if (!fullOffDateSet.has(dateStr)) {
+          mealsServedForManager += dateTotalEffectiveMeals.get(dateStr) || 0;
+        }
+      }
+    }
+
+    if (activeDaysCount > 0) {
+      const feeAmount = Math.round(mealsServedForManager * rate * 100) / 100;
+      totalMessManagerFees += feeAmount;
+      managerCalculations.push({
+        manager: mgr,
+        activeStartDate: earliestActiveInMonth,
+        activeEndDate: mgr.endDate || latestActiveInMonth,
+        activeDaysCount,
+        mealsServed: mealsServedForManager,
+        ratePerMeal: rate,
+        feeAmount,
+      });
+    }
+  }
+
+  return {
+    totalMeals,
+    mealRate,
+    totalMessManagerFees,
+    managerCalculations,
+    fullOffDays: fullOffDateSet.size,
+  };
+}
+
+// Setup simulation: April 2026 (30 days)
+// Manager 1 (Sultan): April 1 to April 15 (inclusive resignation)
+// Manager 2 (Ratul): April 16 to Present (active)
+const testManagers = [
+  { id: 'MGR-1', name: 'Sultan', startDate: '2026-04-01', endDate: '2026-04-15', status: 'Resigned' },
+  { id: 'MGR-2', name: 'Ratul', startDate: '2026-04-16', endDate: null, status: 'Active' },
+];
+
+// Daily meals: 20 meals every day from Day 1 to Day 30 (30 days * 20 = 600 raw meals)
+const dynamicMeals = [];
+for (let d = 1; d <= 30; d++) {
+  const dayStr = String(d).padStart(2, '0');
+  dynamicMeals.push({
+    memberId: 'MEM-1',
+    month: '2026-04',
+    date: `2026-04-${dayStr}`,
+    count: 20,
+    type: 'Double',
+  });
+}
+
+// Closures:
+// 2026-04-10: FULL_OFF (College Holiday) -> in Manager 1 period
+// 2026-04-25: FULL_OFF (Unexpected Closure) -> in Manager 2 period
+const testClosures = [
+  { date: '2026-04-10', month: '2026-04', status: 'FULL_OFF', reason: 'College Holiday' },
+  { date: '2026-04-25', month: '2026-04', status: 'FULL_OFF', reason: 'Unexpected Closure' },
+];
+
+const dynamicExpenses = [{ month: '2026-04', amount: 33600 }];
+const dynamicDeposits = [];
+
+const dynamicResult = calculateDynamicMonthSummary(
+  '2026-04',
+  [{ id: 'MEM-1', name: 'Test Member', room: '101', floor: '1st Floor' }],
+  dynamicMeals,
+  dynamicExpenses,
+  dynamicDeposits,
+  5,
+  testClosures,
+  testManagers
+);
+
+// Analysis:
+// Total raw meals: 30 days * 20 = 600 meals
+// 2 days are FULL_OFF (2 * 20 = 40 meals excluded)
+// Effective total meals: 600 - 40 = 560 meals
+assert(dynamicResult.totalMeals === 560, 'Total effective meals = 560 (40 meals excluded from 2 FULL OFF days)');
+assert(dynamicResult.fullOffDays === 2, 'Full OFF days count = 2');
+assert(dynamicResult.mealRate === 60, 'Meal rate = 33600 / 560 = 60.00 BDT/meal');
+
+// Manager 1 (Sultan): Days 1-15 = 15 days.
+// 14 regular days * 20 meals = 280 meals (Day 10 holiday excluded!)
+// Fee = 280 meals * 5 = 1400 BDT
+const sultanCalc = dynamicResult.managerCalculations.find((c) => c.manager.name === 'Sultan');
+assert(sultanCalc !== undefined, 'Sultan calculation found');
+assert(sultanCalc.activeDaysCount === 15, 'Sultan active days in month = 15 days (inclusive)');
+assert(sultanCalc.mealsServed === 280, 'Sultan actual meals served = 280 (Day 10 holiday excluded)');
+assert(sultanCalc.feeAmount === 1400, 'Sultan earned fee = 280 * 5 = 1400 BDT');
+
+// Manager 2 (Ratul): Days 16-30 = 15 days.
+// 14 regular days * 20 meals = 280 meals (Day 25 closure excluded!)
+// Fee = 280 meals * 5 = 1400 BDT
+const ratulCalc = dynamicResult.managerCalculations.find((c) => c.manager.name === 'Ratul');
+assert(ratulCalc !== undefined, 'Ratul calculation found');
+assert(ratulCalc.activeDaysCount === 15, 'Ratul active days in month = 15 days (inclusive)');
+assert(ratulCalc.mealsServed === 280, 'Ratul actual meals served = 280 (Day 25 closure excluded)');
+assert(ratulCalc.feeAmount === 1400, 'Ratul earned fee = 280 * 5 = 1400 BDT');
+
+// Total mess manager fee
+assert(dynamicResult.totalMessManagerFees === 2800, 'Total mess manager fees = 2800 BDT (Option A)');
+
 console.log('\n=============================================');
 console.log(`TEST SUMMARY: ${testsPassed} PASSED, ${testsFailed} FAILED`);
 console.log('=============================================\n');

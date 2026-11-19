@@ -48,6 +48,13 @@ export const TransactionsPage: React.FC = () => {
       () => db.deposits.where('month').equals(selectedMonth).toArray(),
       [selectedMonth]
     ) || [];
+  const closures =
+    useLiveQuery(
+      () => db.dailyClosures.where('month').equals(selectedMonth).toArray(),
+      [selectedMonth]
+    ) || [];
+  const managers =
+    useLiveQuery(() => db.managers.orderBy('startDate').toArray(), []) || [];
 
   // Full financial calculation
   const { overview, memberSummaries } = useMemo(() => {
@@ -57,9 +64,11 @@ export const TransactionsPage: React.FC = () => {
       mealEntries,
       expenses,
       deposits,
-      settings.managerFeePerMeal || 5
+      settings.managerFeePerMeal || 5,
+      closures,
+      managers
     );
-  }, [selectedMonth, members, mealEntries, expenses, deposits, settings.managerFeePerMeal]);
+  }, [selectedMonth, members, mealEntries, expenses, deposits, settings.managerFeePerMeal, closures, managers]);
 
   // Filters & Search
   const [searchQuery, setSearchQuery] = useState('');

@@ -1,5 +1,14 @@
 import Dexie, { Table } from 'dexie';
-import { Member, MealEntry, Expense, Deposit, Category, SystemSettings } from '../types';
+import {
+  Member,
+  MealEntry,
+  Expense,
+  Deposit,
+  Category,
+  SystemSettings,
+  ManagerPeriod,
+  DailyMealClosure,
+} from '../types';
 import { SEED_MEMBERS } from './seedMembers';
 import { DEFAULT_CATEGORIES, DEFAULT_SETTINGS } from './seedData';
 
@@ -10,10 +19,12 @@ export class MealDatabase extends Dexie {
   deposits!: Table<Deposit, string>;
   categories!: Table<Category, string>;
   settings!: Table<SystemSettings, string>;
+  managers!: Table<ManagerPeriod, string>;
+  dailyClosures!: Table<DailyMealClosure, string>;
 
   constructor() {
     super('MealManagementDB');
-    
+
     // Schema version 1
     this.version(1).stores({
       members: 'id, name, room, floor, status, joiningDate',
@@ -21,7 +32,19 @@ export class MealDatabase extends Dexie {
       expenses: 'id, date, month, category, amount',
       deposits: 'id, memberId, date, month, amount, room',
       categories: 'id, name',
-      settings: 'id'
+      settings: 'id',
+    });
+
+    // Schema version 2: Dynamic Manager History & Daily Meal Closures
+    this.version(2).stores({
+      members: 'id, name, room, floor, status, joiningDate',
+      mealEntries: 'id, memberId, date, month, type, [memberId+month]',
+      expenses: 'id, date, month, category, amount',
+      deposits: 'id, memberId, date, month, amount, room',
+      categories: 'id, name',
+      settings: 'id',
+      managers: 'id, name, startDate, endDate, status',
+      dailyClosures: 'date, month, status',
     });
   }
 }
@@ -41,11 +64,26 @@ export async function initializeDatabase(): Promise<void> {
         updatedAt: now,
       }));
 
-      await db.transaction('rw', [db.members, db.categories, db.settings], async () => {
-        await db.members.bulkAdd(membersToInsert);
-        await db.categories.bulkAdd(DEFAULT_CATEGORIES);
-        await db.settings.put(DEFAULT_SETTINGS);
-      });
+      await db.transaction(
+        'rw',
+        [db.members, db.categories, db.settings, db.managers],
+        async () => {
+          await db.members.bulkAdd(membersToInsert);
+          await db.categories.bulkAdd(DEFAULT_CATEGORIES);
+          await db.settings.put(DEFAULT_SETTINGS);
+          // Initial manager
+          await db.managers.put({
+            id: 'MGR-001',
+            name: DEFAULT_SETTINGS.managerName || 'Ratul',
+            startDate: '2026-01-01',
+            endDate: null,
+            status: 'Active',
+            notes: 'Initial mess manager',
+            createdAt: now,
+            updatedAt: now,
+          });
+        }
+      );
       console.log(`Seeded ${membersToInsert.length} members successfully.`);
     } else {
       // Ensure settings and categories exist
@@ -56,6 +94,22 @@ export async function initializeDatabase(): Promise<void> {
       const catCount = await db.categories.count();
       if (catCount === 0) {
         await db.categories.bulkAdd(DEFAULT_CATEGORIES);
+      }
+      // Ensure at least one manager exists
+      const mgrCount = await db.managers.count();
+      if (mgrCount === 0) {
+        const now = Date.now();
+        const currentSettings = (await db.settings.get('app_settings')) || DEFAULT_SETTINGS;
+        await db.managers.put({
+          id: 'MGR-001',
+          name: currentSettings.managerName || 'Ratul',
+          startDate: '2026-01-01',
+          endDate: null,
+          status: 'Active',
+          notes: 'Mess manager',
+          createdAt: now,
+          updatedAt: now,
+        });
       }
     }
   } catch (error) {

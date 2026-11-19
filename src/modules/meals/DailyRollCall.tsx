@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { useLiveQuery } from 'dexie-react-hooks';
 import { Member, MealEntry, MealStatus } from '../../types';
 import { db } from '../../db';
 import { Button } from '../../components/ui/Button';
@@ -10,6 +11,7 @@ import {
   CheckCheck,
   XCircle,
   Building,
+  CalendarOff,
 } from 'lucide-react';
 
 interface DailyRollCallProps {
@@ -28,6 +30,13 @@ export const DailyRollCall: React.FC<DailyRollCallProps> = ({
   searchFilter,
 }) => {
   const [selectedFloor, setSelectedFloor] = useState('ALL');
+
+  // Query closure for the current selectedDate
+  const closure = useLiveQuery(
+    () => db.dailyClosures.get(selectedDate),
+    [selectedDate]
+  );
+  const isFullOff = closure?.status === 'FULL_OFF';
 
   // Change date by delta (-1 or +1 day)
   const handleDateDelta = (delta: number) => {
@@ -159,11 +168,23 @@ export const DailyRollCall: React.FC<DailyRollCallProps> = ({
 
         {/* Daily Stats & Actions */}
         <div className="flex flex-wrap items-center gap-3">
-          <div className="bg-emerald-50 text-emerald-800 border border-emerald-200/80 px-3.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5">
+          <div
+            className={`border px-3.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 ${
+              isFullOff
+                ? 'bg-rose-50 text-rose-800 border-rose-300'
+                : 'bg-emerald-50 text-emerald-800 border-emerald-200/80'
+            }`}
+          >
             <span>Total Today:</span>
-            <span className="text-sm text-emerald-700 font-black font-mono">
-              {dayTotalMeals} meals
-            </span>
+            {isFullOff ? (
+              <span className="text-sm text-rose-700 font-black font-mono">
+                0 meals (Closed) <span className="text-[10px] text-rose-500 font-normal">Raw: {dayTotalMeals}</span>
+              </span>
+            ) : (
+              <span className="text-sm text-emerald-700 font-black font-mono">
+                {dayTotalMeals} meals
+              </span>
+            )}
           </div>
 
           <Button
@@ -171,12 +192,47 @@ export const DailyRollCall: React.FC<DailyRollCallProps> = ({
             variant="outline"
             icon={<Copy className="w-3.5 h-3.5" />}
             onClick={handleCopyPreviousDay}
-            title="Copy all meal statuses from the previous day"
+            disabled={isFullOff}
+            title={isFullOff ? 'Disabled on Full Meal OFF days' : 'Copy all meal statuses from the previous day'}
           >
             Copy Previous Day
           </Button>
         </div>
       </div>
+
+      {/* FULL MEAL OFF Alert Banner */}
+      {isFullOff && (
+        <div className="bg-rose-50 border-2 border-rose-300 rounded-2xl p-4 text-rose-900 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
+          <div className="flex items-start gap-3">
+            <div className="w-10 h-10 rounded-xl bg-rose-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+              <CalendarOff className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="font-bold text-sm text-rose-900">
+                  FULL MEAL OFF — Mess Closed Today
+                </h3>
+                <span className="text-[10px] uppercase font-black px-2 py-0.5 rounded bg-rose-200 text-rose-800">
+                  {closure?.reason || 'Holiday'}
+                </span>
+              </div>
+              <p className="text-xs text-rose-700 mt-0.5">
+                All members' meals for this date count as <strong>0</strong> in financial statements and manager fees. Individual border statuses below are safely preserved in the database.
+              </p>
+            </div>
+          </div>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={async () => {
+              await db.dailyClosures.delete(selectedDate);
+            }}
+            className="border-rose-300 text-rose-800 hover:bg-rose-100 shrink-0"
+          >
+            Restore Regular Dining
+          </Button>
+        </div>
+      )}
 
       {/* Room-wise Member Cards for quick touch selection */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">

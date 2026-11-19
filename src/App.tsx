@@ -6,6 +6,7 @@ import { Layout } from './components/layout/Layout';
 import { DashboardPage } from './modules/dashboard/DashboardPage';
 import { MembersPage } from './modules/members/MembersPage';
 import { MealManagementPage } from './modules/meals/MealManagementPage';
+import { ManagersAndClosuresPage } from './modules/managers/ManagersAndClosuresPage';
 import { ExpensesPage } from './modules/expenses/ExpensesPage';
 import { TransactionsPage } from './modules/transactions/TransactionsPage';
 import { ReportsPage } from './modules/reports/ReportsPage';
@@ -23,6 +24,7 @@ export function App() {
               <Route index element={<DashboardPage />} />
               <Route path="members" element={<MembersPage />} />
               <Route path="meals" element={<MealManagementPage />} />
+              <Route path="managers" element={<ManagersAndClosuresPage />} />
               <Route path="expenses" element={<ExpensesPage />} />
               <Route path="transactions" element={<TransactionsPage />} />
               <Route path="reports" element={<ReportsPage />} />

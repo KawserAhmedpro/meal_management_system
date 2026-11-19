@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db';
 import { useApp } from '../../context/AppContext';
-import { calculateMonthSummary } from '../../utils/calculations';
+import { calculateMonthSummary, isManagerActiveOnDate } from '../../utils/calculations';
 import { formatCurrency, formatDate, formatMonthName } from '../../utils/formatters';
 import { exportMonthToExcel } from '../../utils/excelExporter';
 import { exportTableToPdf } from '../../utils/pdfExporter';
@@ -22,6 +22,10 @@ import {
   AlertTriangle,
   DoorClosed,
   FileText,
+  CalendarOff,
+  UserCheck,
+  History,
+  ShieldCheck,
 } from 'lucide-react';
 
 export const ReportsPage: React.FC = () => {
@@ -29,6 +33,9 @@ export const ReportsPage: React.FC = () => {
   const [selectedReport, setSelectedReport] = useState<
     | 'monthly-meal'
     | 'daily-meal'
+    | 'meal-closures'
+    | 'manager-history'
+    | 'manager-fees'
     | 'expenses'
     | 'deposits'
     | 'dues'
@@ -56,8 +63,15 @@ export const ReportsPage: React.FC = () => {
       () => db.deposits.where('month').equals(selectedMonth).toArray(),
       [selectedMonth]
     ) || [];
+  const closures =
+    useLiveQuery(
+      () => db.dailyClosures.where('month').equals(selectedMonth).toArray(),
+      [selectedMonth]
+    ) || [];
+  const managers =
+    useLiveQuery(() => db.managers.orderBy('startDate').toArray(), []) || [];
 
-  // Monthly Calculations
+  // Monthly Calculations with closures & Option A manager fees
   const { overview, memberSummaries } = useMemo(() => {
     return calculateMonthSummary(
       selectedMonth,
@@ -65,9 +79,11 @@ export const ReportsPage: React.FC = () => {
       mealEntries,
       expenses,
       deposits,
-      settings.managerFeePerMeal || 5
+      settings.managerFeePerMeal || 5,
+      closures,
+      managers
     );
-  }, [selectedMonth, members, mealEntries, expenses, deposits, settings.managerFeePerMeal]);
+  }, [selectedMonth, members, mealEntries, expenses, deposits, settings.managerFeePerMeal, closures, managers]);
 
   // Days in month
   const [y, m] = selectedMonth.split('-').map(Number);
@@ -95,6 +111,35 @@ export const ReportsPage: React.FC = () => {
     }
     return list;
   }, [selectedMonth, daysInMonth, mealEntries]);
+
+  // Date-wise Meal ON/OFF Closure calculation
+  const closureStats = useMemo(() => {
+    const list = [];
+    for (let d = 1; d <= daysInMonth; d++) {
+      const dayStr = String(d).padStart(2, '0');
+      const dateStr = `${selectedMonth}-${dayStr}`;
+      const dateObj = new Date(y, m - 1, d);
+      const dayName = dateObj.toLocaleDateString('en-US', { weekday: 'short' });
+      const closure = closures.find((c) => c.date === dateStr);
+      const isFullOff = closure?.status === 'FULL_OFF';
+      const dayMeals = mealEntries.filter((me) => me.date === dateStr);
+      const rawCount = dayMeals.reduce((sum, me) => sum + (me.count || 0), 0);
+      const effectiveCount = isFullOff ? 0 : rawCount;
+      const activeMgr = managers.find((mgr) => isManagerActiveOnDate(mgr, dateStr));
+
+      list.push({
+        day: d,
+        date: dateStr,
+        dayName,
+        status: isFullOff ? ('FULL_OFF' as const) : ('FULL_ON' as const),
+        reason: isFullOff ? closure?.reason || 'Mess Closed' : 'Regular Dining',
+        rawCount,
+        effectiveCount,
+        managerName: activeMgr?.name || settings.managerName || 'Manager',
+      });
+    }
+    return list;
+  }, [selectedMonth, daysInMonth, closures, mealEntries, managers, y, m, settings.managerName]);
 
   // Room-wise Meal Report calculation
   const roomMealStats = useMemo(() => {
@@ -127,18 +172,21 @@ export const ReportsPage: React.FC = () => {
   // Report items list
   const reportsList = [
     { id: 'summary', name: 'Monthly Summary Report', icon: FileBarChart2 },
-    { id: 'monthly-meal', name: 'Monthly Meal Report', icon: UtensilsCrossed },
-    { id: 'daily-meal', name: 'Daily Meal Report', icon: Calendar },
+    { id: 'monthly-meal', name: 'Monthly Meal Summary', icon: UtensilsCrossed },
+    { id: 'meal-closures', name: 'Date-wise Meal ON/OFF Report', icon: CalendarOff },
+    { id: 'manager-history', name: 'Manager Assignment History', icon: History },
+    { id: 'manager-fees', name: 'Manager Meal Count & Fee (Option A)', icon: UserCheck },
+    { id: 'financial', name: 'Monthly Financial Statement', icon: FileText },
+    { id: 'dues', name: 'Member Due & Advance Report', icon: AlertTriangle },
     { id: 'expenses', name: 'Market Expense Report', icon: ShoppingCart },
     { id: 'deposits', name: 'Member Deposit Report', icon: Receipt },
-    { id: 'dues', name: 'Member Due & Advance Report', icon: AlertTriangle },
-    { id: 'financial', name: 'Full Financial Statement', icon: FileText },
+    { id: 'daily-meal', name: 'Daily Meal Roll Call Report', icon: Calendar },
     { id: 'room-meal', name: 'Room-wise Meal Report', icon: DoorClosed },
   ];
 
   // Excel Export Handler
   const handleExcelExport = () => {
-    exportMonthToExcel(selectedMonth, members, mealEntries, expenses, deposits, settings);
+    exportMonthToExcel(selectedMonth, members, mealEntries, expenses, deposits, settings, closures, managers);
   };
 
   // PDF Export Handler based on active report
@@ -250,6 +298,64 @@ export const ReportsPage: React.FC = () => {
         settings,
         selectedMonth,
         [{ label: 'Total Meals', value: String(overview.totalMeals) }]
+      );
+    } else if (selectedReport === 'meal-closures') {
+      const headers = ['Date', 'Day', 'Status', 'Reason / Holiday', 'Raw Meals', 'Effective Meals', 'Manager'];
+      const rows = closureStats.map((c) => [
+        c.date,
+        c.dayName,
+        c.status === 'FULL_OFF' ? 'FULL MEAL OFF' : 'REGULAR ON',
+        c.reason,
+        c.rawCount,
+        c.effectiveCount,
+        c.managerName,
+      ]);
+      exportTableToPdf(
+        `Date-wise Meal ON-OFF Report - ${sMonth}`,
+        headers,
+        rows,
+        settings,
+        selectedMonth,
+        [
+          { label: 'Full OFF Days', value: String(overview.fullOffDatesCount) },
+          { label: 'Total Actual Meals', value: String(overview.totalMeals) },
+        ]
+      );
+    } else if (selectedReport === 'manager-history') {
+      const headers = ['Manager Name', 'Phone', 'Start Date', 'Resignation Date', 'Status', 'Notes'];
+      const rows = managers.map((m) => [
+        m.name,
+        m.phone || '—',
+        m.startDate,
+        m.endDate || 'Active (Present)',
+        m.status,
+        m.notes || '—',
+      ]);
+      exportTableToPdf(
+        `Manager Assignment & Resignation History - ${sMonth}`,
+        headers,
+        rows,
+        settings,
+        selectedMonth,
+        [{ label: 'Total Managers Logged', value: String(managers.length) }]
+      );
+    } else if (selectedReport === 'manager-fees') {
+      const headers = ['Manager Name', 'Active Period', 'Days Active', 'Meals Served', 'Rate (৳)', 'Earned Fee (৳)'];
+      const rows = overview.managerCalculations.map((c) => [
+        c.manager.name,
+        `${c.activeStartDate} to ${c.activeEndDate}`,
+        c.activeDaysCount,
+        c.mealsServed,
+        `৳${c.ratePerMeal}`,
+        formatCurrency(c.feeAmount),
+      ]);
+      exportTableToPdf(
+        `Manager-wise Actual Meal Count & Fee (Option A) - ${sMonth}`,
+        headers,
+        rows,
+        settings,
+        selectedMonth,
+        [{ label: 'Total Manager Fees', value: formatCurrency(overview.totalManagerFees) }]
       );
     } else {
       // Default / Financial statement
@@ -501,6 +607,212 @@ export const ReportsPage: React.FC = () => {
           </div>
         )}
 
+        {/* Report: Date-wise Meal ON/OFF Closures */}
+        {selectedReport === 'meal-closures' && (
+          <div>
+            <div className="p-4 bg-slate-50 border-b border-slate-200 flex flex-wrap justify-between items-center gap-3">
+              <div>
+                <h3 className="font-bold text-sm text-slate-900">
+                  Date-wise Meal ON/OFF & Mess Closures ({formatMonthName(selectedMonth)})
+                </h3>
+                <p className="text-xs text-slate-500">
+                  Full list of daily dining statuses. On FULL MEAL OFF days, meal counts are zeroed out while records remain safe.
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-rose-50 text-rose-700 border border-rose-200">
+                  {overview.fullOffDatesCount} Full OFF Days
+                </span>
+                <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                  {daysInMonth - overview.fullOffDatesCount} Regular Days
+                </span>
+              </div>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-slate-100 border-b border-slate-200 text-slate-600 font-bold uppercase tracking-wider">
+                  <tr>
+                    <th className="py-3 px-4">Date</th>
+                    <th className="py-3 px-4">Day</th>
+                    <th className="py-3 px-4">Status</th>
+                    <th className="py-3 px-4">Reason / Holiday</th>
+                    <th className="py-3 px-4 text-center">Raw Meals Logged</th>
+                    <th className="py-3 px-4 text-center">Effective Meals Count</th>
+                    <th className="py-3 px-4">Active Manager</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 font-medium">
+                  {closureStats.map((c) => (
+                    <tr
+                      key={c.date}
+                      className={
+                        c.status === 'FULL_OFF'
+                          ? 'bg-rose-50/50 hover:bg-rose-50'
+                          : 'hover:bg-slate-50'
+                      }
+                    >
+                      <td className="py-3 px-4 font-bold font-mono text-slate-900">{c.date}</td>
+                      <td className="py-3 px-4 text-slate-500 font-medium">{c.dayName}</td>
+                      <td className="py-3 px-4">
+                        <Badge variant={c.status === 'FULL_OFF' ? 'danger' : 'success'}>
+                          {c.status === 'FULL_OFF' ? 'FULL MEAL OFF' : 'REGULAR ON'}
+                        </Badge>
+                      </td>
+                      <td className="py-3 px-4 text-slate-800 font-semibold">{c.reason}</td>
+                      <td className="py-3 px-4 text-center font-mono text-slate-500">{c.rawCount}</td>
+                      <td className="py-3 px-4 text-center font-mono font-black">
+                        {c.status === 'FULL_OFF' ? (
+                          <span className="text-rose-600">0 (Excluded)</span>
+                        ) : (
+                          <span className="text-emerald-700">{c.effectiveCount}</span>
+                        )}
+                      </td>
+                      <td className="py-3 px-4 text-slate-700">{c.managerName}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* Report: Manager Assignment & Resignation History */}
+        {selectedReport === 'manager-history' && (
+          <div>
+            <div className="p-4 bg-slate-50 border-b border-slate-200 flex justify-between items-center">
+              <div>
+                <h3 className="font-bold text-sm text-slate-900">
+                  Manager Assignment & Resignation History
+                </h3>
+                <p className="text-xs text-slate-500">
+                  Official appointment periods, inclusive resignation dates, and status log
+                </p>
+              </div>
+              <Badge variant="default">{managers.length} Records</Badge>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-slate-100 border-b border-slate-200 text-slate-600 font-bold uppercase tracking-wider">
+                  <tr>
+                    <th className="py-3 px-4">Manager Name</th>
+                    <th className="py-3 px-4">Phone Number</th>
+                    <th className="py-3 px-4">Assignment Start Date</th>
+                    <th className="py-3 px-4">Resignation / Last Working Date</th>
+                    <th className="py-3 px-4">Status</th>
+                    <th className="py-3 px-4">Notes / Remarks</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 font-medium">
+                  {managers.map((m) => (
+                    <tr key={m.id} className="hover:bg-slate-50">
+                      <td className="py-3 px-4 font-bold text-slate-900 text-sm">{m.name}</td>
+                      <td className="py-3 px-4 text-slate-600 font-mono">{m.phone || '—'}</td>
+                      <td className="py-3 px-4 font-semibold text-slate-800">{m.startDate}</td>
+                      <td className="py-3 px-4 font-semibold text-slate-800">
+                        {m.endDate ? (
+                          m.endDate
+                        ) : (
+                          <span className="text-emerald-600 font-bold">Present (Active)</span>
+                        )}
+                      </td>
+                      <td className="py-3 px-4">
+                        <Badge variant={m.status === 'Active' ? 'success' : 'neutral'}>
+                          {m.status}
+                        </Badge>
+                      </td>
+                      <td className="py-3 px-4 text-slate-500 italic">{m.notes || '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* Report: Manager-wise Actual Meal Count & Fee (Option A) */}
+        {selectedReport === 'manager-fees' && (
+          <div>
+            <div className="p-4 bg-slate-50 border-b border-slate-200 flex flex-wrap justify-between items-center gap-3">
+              <div>
+                <h3 className="font-bold text-sm text-slate-900">
+                  Manager-wise Actual Meal Count & Fee (Option A) — {formatMonthName(selectedMonth)}
+                </h3>
+                <p className="text-xs text-slate-500">
+                  Formula: Manager Fee = Actual Meals Served During Active Tenure × Fee Rate
+                </p>
+              </div>
+              <div className="bg-emerald-50 text-emerald-800 border border-emerald-200 px-3 py-1 rounded-xl font-bold text-xs">
+                Total Manager Fees: {formatCurrency(overview.totalManagerFees)}
+              </div>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-slate-100 border-b border-slate-200 text-slate-600 font-bold uppercase tracking-wider">
+                  <tr>
+                    <th className="py-3 px-4">Manager Name</th>
+                    <th className="py-3 px-4">Active Dates in Month</th>
+                    <th className="py-3 px-4 text-center">Days Active</th>
+                    <th className="py-3 px-4 text-center">Actual Meals Served</th>
+                    <th className="py-3 px-4 text-center">Fee Rate</th>
+                    <th className="py-3 px-4 text-right">Earned Manager Fee</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 font-medium">
+                  {overview.managerCalculations.map((c) => (
+                    <tr key={c.manager.id} className="hover:bg-slate-50">
+                      <td className="py-3 px-4 font-bold text-slate-900 text-sm">
+                        {c.manager.name}
+                        {c.manager.status === 'Active' && (
+                          <span className="ml-2 px-1.5 py-0.5 rounded text-[10px] bg-emerald-100 text-emerald-800 font-bold">
+                            Active
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-3 px-4 text-slate-700">
+                        {c.activeStartDate} to {c.activeEndDate}
+                      </td>
+                      <td className="py-3 px-4 text-center font-mono">{c.activeDaysCount} days</td>
+                      <td className="py-3 px-4 text-center font-mono font-bold text-slate-900">
+                        {c.mealsServed} meals
+                      </td>
+                      <td className="py-3 px-4 text-center font-mono text-slate-600">
+                        ৳{c.ratePerMeal} / meal
+                      </td>
+                      <td className="py-3 px-4 text-right font-mono font-black text-emerald-700 text-sm">
+                        {formatCurrency(c.feeAmount)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot className="bg-slate-50 border-t-2 border-slate-200 font-bold">
+                  <tr>
+                    <td colSpan={3} className="py-3 px-4 uppercase tracking-wider text-slate-600">
+                      Grand Total Manager Fees:
+                    </td>
+                    <td className="py-3 px-4 text-center text-slate-900 font-mono">
+                      {overview.totalMeals} meals
+                    </td>
+                    <td className="py-3 px-4"></td>
+                    <td className="py-3 px-4 text-right text-emerald-700 text-sm font-black font-mono">
+                      {formatCurrency(overview.totalManagerFees)}
+                    </td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+
+            <div className="p-4 bg-amber-50/70 border-t border-amber-200 text-xs text-amber-900 space-y-1">
+              <span className="font-bold">Option A Rule Details:</span>
+              <p>
+                Each manager only earns fees for actual meals served during their active assignment period (between Start Date and Inclusive Resignation Date). Dates before appointment, dates after resignation, and all FULL MEAL OFF days are strictly excluded from calculations.
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* Report 4: Room-wise Meal Report */}
         {selectedReport === 'room-meal' && (
           <div className="overflow-x-auto">
@@ -529,48 +841,188 @@ export const ReportsPage: React.FC = () => {
           </div>
         )}
 
-        {/* Report 5, 6, 7, 8: Full Statements / Lists */}
-        {(selectedReport === 'monthly-meal' ||
-          selectedReport === 'financial' ||
-          selectedReport === 'expenses' ||
-          selectedReport === 'deposits') && (
+        {/* Report 5: Monthly Meal Summary */}
+        {selectedReport === 'monthly-meal' && (
+          <div>
+            <div className="p-4 bg-slate-50 border-b border-slate-200 flex flex-wrap justify-between items-center gap-3">
+              <div>
+                <h3 className="font-bold text-sm text-slate-900">
+                  Monthly Member Meal Summary ({formatMonthName(selectedMonth)})
+                </h3>
+                <p className="text-xs text-slate-500">
+                  Member-by-member breakdown of actual dining meals and accrued fees
+                </p>
+              </div>
+              <div className="text-xs font-bold text-slate-700 bg-white border border-slate-200 px-3 py-1 rounded-xl">
+                Grand Total Meals: <span className="text-emerald-700">{overview.totalMeals} meals</span>
+              </div>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-slate-100 border-b border-slate-200 text-slate-600 font-bold uppercase tracking-wider">
+                  <tr>
+                    <th className="py-3 px-4">Room No</th>
+                    <th className="py-3 px-4">Member Name</th>
+                    <th className="py-3 px-3 text-center">Raw Meals</th>
+                    <th className="py-3 px-3 text-center">Effective Meals</th>
+                    <th className="py-3 px-3 text-right">Meal Cost (৳)</th>
+                    <th className="py-3 px-3 text-right">Manager Fee (৳)</th>
+                    <th className="py-3 px-4 text-right">Total Payable (৳)</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 font-medium">
+                  {memberSummaries.map((s) => (
+                    <tr key={s.member.id} className="hover:bg-slate-50">
+                      <td className="py-3 px-4 font-mono font-bold text-slate-900">{s.member.room}</td>
+                      <td className="py-3 px-4 font-semibold text-slate-800">{s.member.name}</td>
+                      <td className="py-3 px-3 text-center font-mono text-slate-500">{s.rawMealsCount}</td>
+                      <td className="py-3 px-3 text-center font-mono font-bold text-emerald-700">
+                        {s.totalMeals}
+                      </td>
+                      <td className="py-3 px-3 text-right font-mono">{formatCurrency(s.mealExpenseWithoutFee)}</td>
+                      <td className="py-3 px-3 text-right font-mono text-amber-700 font-semibold">{formatCurrency(s.managerFee)}</td>
+                      <td className="py-3 px-4 text-right font-mono font-black text-slate-900">
+                        {formatCurrency(s.totalPayable)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* Report 6: Full Financial Statement */}
+        {selectedReport === 'financial' && (
+          <div>
+            <div className="p-4 bg-slate-50 border-b border-slate-200 flex flex-wrap justify-between items-center gap-3">
+              <div>
+                <h3 className="font-bold text-sm text-slate-900">
+                  Monthly Financial Statement ({formatMonthName(selectedMonth)})
+                </h3>
+                <p className="text-xs text-slate-500">
+                  Consolidated accounting of deposits, market costs, manager remuneration, and member dues
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                {overview.managerCalculations.map((c) => (
+                  <span
+                    key={c.manager.id}
+                    className="text-[11px] font-bold bg-white border border-slate-200 px-2.5 py-1 rounded-lg text-slate-700"
+                  >
+                    Fee ({c.manager.name}): <strong className="text-emerald-700">{formatCurrency(c.feeAmount)}</strong>
+                  </span>
+                ))}
+              </div>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-slate-100 border-b border-slate-200 text-slate-600 font-bold uppercase tracking-wider">
+                  <tr>
+                    <th className="py-3 px-4">Room No</th>
+                    <th className="py-3 px-4">Member Name</th>
+                    <th className="py-3 px-3 text-center">Meals</th>
+                    <th className="py-3 px-3 text-right">Meal Cost</th>
+                    <th className="py-3 px-3 text-right">Mgr Fee</th>
+                    <th className="py-3 px-3 text-right">Total Payable</th>
+                    <th className="py-3 px-3 text-right">Deposits</th>
+                    <th className="py-3 px-4 text-right">Due / Advance</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 font-medium">
+                  {memberSummaries.map((s) => (
+                    <tr key={s.member.id} className="hover:bg-slate-50">
+                      <td className="py-3 px-4 font-mono font-bold text-slate-900">{s.member.room}</td>
+                      <td className="py-3 px-4 font-semibold text-slate-800">{s.member.name}</td>
+                      <td className="py-3 px-3 text-center font-mono">{s.totalMeals}</td>
+                      <td className="py-3 px-3 text-right font-mono">{formatCurrency(s.mealExpenseWithoutFee)}</td>
+                      <td className="py-3 px-3 text-right font-mono text-amber-700">{formatCurrency(s.managerFee)}</td>
+                      <td className="py-3 px-3 text-right font-mono font-bold text-slate-900">{formatCurrency(s.totalPayable)}</td>
+                      <td className="py-3 px-3 text-right font-mono text-blue-600 font-semibold">{formatCurrency(s.totalDeposits)}</td>
+                      <td className="py-3 px-4 text-right font-mono font-bold">
+                        {s.due > 0 ? (
+                          <span className="text-rose-600 font-black">{formatCurrency(s.due)} Due</span>
+                        ) : s.due < 0 ? (
+                          <span className="text-emerald-600 font-black">
+                            -{formatCurrency(Math.abs(s.due))} Adv.
+                          </span>
+                        ) : (
+                          <span className="text-slate-400">0.00</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* Report 7: Expenses */}
+        {selectedReport === 'expenses' && (
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
-              <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold uppercase">
+              <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold uppercase tracking-wider">
                 <tr>
-                  <th className="py-3 px-4">Room No</th>
-                  <th className="py-3 px-4">Member Name</th>
-                  <th className="py-3 px-3 text-center">Meals</th>
-                  <th className="py-3 px-3 text-right">Meal Cost</th>
-                  <th className="py-3 px-3 text-right">Mgr Fee</th>
-                  <th className="py-3 px-3 text-right">Total Payable</th>
-                  <th className="py-3 px-3 text-right">Total Deposits</th>
-                  <th className="py-3 px-4 text-right">Due / Advance</th>
+                  <th className="py-3 px-4">Date</th>
+                  <th className="py-3 px-4">Category</th>
+                  <th className="py-3 px-4">Item Description</th>
+                  <th className="py-3 px-4 text-right">Amount (৳)</th>
+                  <th className="py-3 px-4">Notes</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
-                {memberSummaries.map((s) => (
-                  <tr key={s.member.id} className="hover:bg-slate-50">
-                    <td className="py-3 px-4 font-mono font-bold">{s.member.room}</td>
-                    <td className="py-3 px-4 font-semibold">{s.member.name}</td>
-                    <td className="py-3 px-3 text-center font-mono">{s.totalMeals}</td>
-                    <td className="py-3 px-3 text-right font-mono">{formatCurrency(s.mealExpenseWithoutFee)}</td>
-                    <td className="py-3 px-3 text-right font-mono">{formatCurrency(s.managerFee)}</td>
-                    <td className="py-3 px-3 text-right font-mono font-bold">{formatCurrency(s.totalPayable)}</td>
-                    <td className="py-3 px-3 text-right font-mono text-blue-600">{formatCurrency(s.totalDeposits)}</td>
-                    <td className="py-3 px-4 text-right font-mono font-bold">
-                      {s.due > 0 ? (
-                        <span className="text-rose-600">{formatCurrency(s.due)} Due</span>
-                      ) : s.due < 0 ? (
-                        <span className="text-emerald-600">
-                          -{formatCurrency(Math.abs(s.due))} Adv.
-                        </span>
-                      ) : (
-                        <span className="text-slate-400">0.00</span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
+              <tbody className="divide-y divide-slate-100 font-medium">
+                {expenses
+                  .sort((a, b) => a.date.localeCompare(b.date))
+                  .map((e) => (
+                    <tr key={e.id} className="hover:bg-slate-50">
+                      <td className="py-3 px-4 font-mono text-slate-800">{formatDate(e.date)}</td>
+                      <td className="py-3 px-4">
+                        <Badge variant="default">{e.category}</Badge>
+                      </td>
+                      <td className="py-3 px-4 font-semibold text-slate-900">{e.title}</td>
+                      <td className="py-3 px-4 text-right font-mono font-bold text-slate-900">
+                        {formatCurrency(e.amount)}
+                      </td>
+                      <td className="py-3 px-4 text-slate-500 italic">{e.notes || '—'}</td>
+                    </tr>
+                  ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {/* Report 8: Deposits */}
+        {selectedReport === 'deposits' && (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold uppercase tracking-wider">
+                <tr>
+                  <th className="py-3 px-4">Date</th>
+                  <th className="py-3 px-4">Room No</th>
+                  <th className="py-3 px-4">Member Name</th>
+                  <th className="py-3 px-4">Payment Method</th>
+                  <th className="py-3 px-4 text-right">Deposit Amount (৳)</th>
+                  <th className="py-3 px-4">Notes</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 font-medium">
+                {deposits
+                  .sort((a, b) => a.date.localeCompare(b.date))
+                  .map((d) => (
+                    <tr key={d.id} className="hover:bg-slate-50">
+                      <td className="py-3 px-4 font-mono text-slate-800">{formatDate(d.date)}</td>
+                      <td className="py-3 px-4 font-mono font-bold text-slate-800">{d.room}</td>
+                      <td className="py-3 px-4 font-semibold text-slate-900">{d.memberName}</td>
+                      <td className="py-3 px-4 text-slate-600">{d.paymentMethod || 'Cash'}</td>
+                      <td className="py-3 px-4 text-right font-mono font-bold text-blue-600">
+                        {formatCurrency(d.amount)}
+                      </td>
+                      <td className="py-3 px-4 text-slate-500 italic">{d.note || '—'}</td>
+                    </tr>
+                  ))}
               </tbody>
             </table>
           </div>

@@ -21,6 +21,12 @@ export const PrintCenterPage: React.FC = () => {
       [selectedMonth]
     ) || [];
 
+  const closure = useLiveQuery(
+    () => db.dailyClosures.get(printDate),
+    [printDate]
+  );
+  const isFullOff = closure?.status === 'FULL_OFF';
+
   // Group members by room
   const roomGroups = useMemo(() => {
     const map = new Map<string, Member[]>();
@@ -138,6 +144,11 @@ export const PrintCenterPage: React.FC = () => {
             <span>Date: <strong>{formatDate(printDate)}</strong></span>
             <span>Manager: <strong>{settings.managerName || 'Manager'}</strong></span>
           </div>
+          {isFullOff && (
+            <div className="bg-rose-100 border border-rose-300 text-rose-900 text-xs font-bold text-center py-1 px-3 rounded-lg mt-2.5">
+              🛑 MESS CLOSED TODAY — FULL MEAL OFF ({closure?.reason || 'Holiday'}). All meal counts are 0.
+            </div>
+          )}
         </div>
 
         {/* Room Table Grid: 4-5 Rooms per row block, exactly as SULTAN MEAL Print sheet */}

@@ -31,6 +31,13 @@ export const DashboardPage: React.FC = () => {
       () => db.deposits.where('month').equals(selectedMonth).toArray(),
       [selectedMonth]
     ) || [];
+  const closures =
+    useLiveQuery(
+      () => db.dailyClosures.where('month').equals(selectedMonth).toArray(),
+      [selectedMonth]
+    ) || [];
+  const managers =
+    useLiveQuery(() => db.managers.orderBy('startDate').toArray(), []) || [];
 
   // Calculate actual statistics from IndexedDB records
   const { overview, memberSummaries } = calculateMonthSummary(
@@ -39,8 +46,13 @@ export const DashboardPage: React.FC = () => {
     mealEntries,
     expenses,
     deposits,
-    settings.managerFeePerMeal || 5
+    settings.managerFeePerMeal || 5,
+    closures,
+    managers
   );
+
+  const activeManagers = managers.filter((m) => m.status === 'Active');
+  const activeManagerDisplay = activeManagers.map((m) => m.name).join(', ') || settings.managerName || 'Manager';
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
@@ -57,13 +69,20 @@ export const DashboardPage: React.FC = () => {
               <span>{settings.institutionName || 'Mymensingh Engineering College'}</span>
             </div>
             <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white">
-              {settings.hallName || 'Omar Ekushe Hall'} — Manager: {settings.managerName || 'Manager'}
+              {settings.hallName || 'Omar Ekushe Hall'} — Manager: {activeManagerDisplay}
             </h2>
-            <p className="text-slate-300 text-xs sm:text-sm mt-1 max-w-xl flex items-center gap-2">
-              <MapPin className="w-3.5 h-3.5 text-slate-400" />
-              Financial & meal management overview for{' '}
-              <strong className="text-emerald-300 font-semibold">{formatMonthName(selectedMonth)}</strong>.
-            </p>
+            <div className="flex flex-wrap items-center gap-2 mt-1">
+              <p className="text-slate-300 text-xs sm:text-sm flex items-center gap-1.5">
+                <MapPin className="w-3.5 h-3.5 text-slate-400" />
+                Financial & meal management overview for{' '}
+                <strong className="text-emerald-300 font-semibold">{formatMonthName(selectedMonth)}</strong>.
+              </p>
+              {overview.fullOffDatesCount > 0 && (
+                <span className="bg-rose-500/20 text-rose-300 border border-rose-500/30 px-2 py-0.5 rounded-full text-xs font-semibold">
+                  {overview.fullOffDatesCount} Full Meal OFF {overview.fullOffDatesCount === 1 ? 'Day' : 'Days'}
+                </span>
+              )}
+            </div>
           </div>
 
           <div className="flex items-center gap-3 bg-slate-800/80 backdrop-blur border border-slate-700/80 rounded-2xl p-3.5 self-start md:self-auto shrink-0 shadow-inner">

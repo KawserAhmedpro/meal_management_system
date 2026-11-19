@@ -54,6 +54,27 @@ export interface Category {
   isDefault?: boolean;
 }
 
+export interface ManagerPeriod {
+  id: string; // e.g. "MGR-xxx"
+  name: string; // e.g. "Ratul", "Sultan", "Robiul"
+  phone?: string;
+  startDate: string; // YYYY-MM-DD (inclusive)
+  endDate?: string | null; // YYYY-MM-DD (inclusive, null or empty if currently active)
+  status: 'Active' | 'Resigned';
+  notes?: string;
+  feeRateOverride?: number; // Optional custom rate if different from mess setting
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface DailyMealClosure {
+  date: string; // YYYY-MM-DD (Primary Key)
+  month: string; // YYYY-MM
+  status: 'FULL_OFF' | 'FULL_ON';
+  reason?: string; // e.g. "College Holiday", "Semester Break", "Ramadan", "Special Closure"
+  updatedAt: number;
+}
+
 export interface SystemSettings {
   id: string; // "app_settings"
   managerName: string;
@@ -72,9 +93,20 @@ export interface SystemSettings {
   reminderDays: number;
 }
 
+export interface ManagerFeeCalculation {
+  manager: ManagerPeriod;
+  activeStartDate: string;
+  activeEndDate: string;
+  activeDaysCount: number;
+  mealsServed: number; // Actual meals during manager's active period (excluding FULL MEAL OFF dates)
+  ratePerMeal: number;
+  feeAmount: number;
+}
+
 export interface MemberFinancialSummary {
   member: Member;
-  totalMeals: number;
+  totalMeals: number; // Effective total meals (0 on FULL MEAL OFF dates)
+  rawMealsCount: number; // Raw count before closure overrides
   mealExpenseWithoutFee: number;
   managerFee: number;
   totalPayable: number;
@@ -87,7 +119,7 @@ export interface MonthFinancialOverview {
   month: string;
   totalMembers: number;
   activeMembers: number;
-  totalMeals: number;
+  totalMeals: number; // Effective total meals
   totalExpenses: number;
   mealRate: number;
   totalDeposits: number;
@@ -97,4 +129,6 @@ export interface MonthFinancialOverview {
   totalDue: number; // sum of positive dues
   totalAdvance: number; // sum of negative dues (as positive value)
   netBalance: number; // totalDeposits - totalPayable
+  fullOffDatesCount: number;
+  managerCalculations: ManagerFeeCalculation[];
 }

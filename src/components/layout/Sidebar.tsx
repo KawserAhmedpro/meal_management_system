@@ -12,6 +12,7 @@ import {
   Database,
   Settings,
   ShieldCheck,
+  UserCheck,
   X,
 } from 'lucide-react';
 
@@ -27,6 +28,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
     { to: '/', label: 'Dashboard', icon: LayoutDashboard },
     { to: '/members', label: 'Members', icon: Users },
     { to: '/meals', label: 'Meal Management', icon: UtensilsCrossed },
+    { to: '/managers', label: 'Managers & Closures', icon: UserCheck },
     { to: '/expenses', label: 'Market & Expenses', icon: ShoppingCart },
     { to: '/transactions', label: 'Transactions', icon: Receipt },
     { to: '/reports', label: 'Reports', icon: FileBarChart2 },

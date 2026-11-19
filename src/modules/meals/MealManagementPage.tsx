@@ -5,6 +5,7 @@ import { useApp } from '../../context/AppContext';
 import { MealGrid } from './MealGrid';
 import { DailyRollCall } from './DailyRollCall';
 import { BulkMealModal } from './BulkMealModal';
+import { DailyClosureModal } from '../managers/DailyClosureModal';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import {
@@ -15,6 +16,7 @@ import {
   Search,
   ChevronLeft,
   ChevronRight,
+  CalendarOff,
 } from 'lucide-react';
 import { formatMonthName } from '../../utils/formatters';
 
@@ -23,6 +25,7 @@ export const MealManagementPage: React.FC = () => {
   const [activeView, setActiveView] = useState<'grid' | 'rollcall'>('grid');
   const [searchFilter, setSearchFilter] = useState('');
   const [isBulkOpen, setIsBulkOpen] = useState(false);
+  const [isClosureOpen, setIsClosureOpen] = useState(false);
   const [selectedDailyDate, setSelectedDailyDate] = useState(`${selectedMonth}-01`);
 
   // Query members and month meals
@@ -83,6 +86,17 @@ export const MealManagementPage: React.FC = () => {
               Daily Roll Call
             </button>
           </div>
+
+          {/* Manage Closures & Holidays */}
+          <Button
+            variant="outline"
+            size="sm"
+            icon={<CalendarOff className="w-3.5 h-3.5 text-rose-600" />}
+            onClick={() => setIsClosureOpen(true)}
+            title="Mark a date as FULL MEAL OFF or ON"
+          >
+            Holidays / Closures
+          </Button>
 
           {/* Bulk Update Trigger */}
           <Button
@@ -157,6 +171,13 @@ export const MealManagementPage: React.FC = () => {
         onClose={() => setIsBulkOpen(false)}
         date={selectedDailyDate}
         members={members}
+      />
+
+      {/* Daily Closure / Holiday Modal */}
+      <DailyClosureModal
+        isOpen={isClosureOpen}
+        onClose={() => setIsClosureOpen(false)}
+        targetDate={selectedDailyDate}
       />
     </div>
   );

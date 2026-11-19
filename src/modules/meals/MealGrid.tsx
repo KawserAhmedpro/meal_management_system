@@ -1,6 +1,8 @@
 import React, { useMemo } from 'react';
-import { Member, MealEntry, MealStatus } from '../../types';
+import { useLiveQuery } from 'dexie-react-hooks';
+import { Member, MealEntry, MealStatus, DailyMealClosure } from '../../types';
 import { db } from '../../db';
+import { CalendarOff, AlertTriangle } from 'lucide-react';
 
 interface MealGridProps {
   members: Member[];
@@ -24,6 +26,27 @@ export const MealGrid: React.FC<MealGridProps> = ({
   const daysArray = useMemo(() => {
     return Array.from({ length: daysInMonth }, (_, i) => i + 1);
   }, [daysInMonth]);
+
+  // Live query for daily closures in this month
+  const closures =
+    useLiveQuery(
+      () => db.dailyClosures.where('month').equals(selectedMonth).toArray(),
+      [selectedMonth]
+    ) || [];
+
+  // Map of closures by day number
+  const closureByDay = useMemo(() => {
+    const map = new Map<number, DailyMealClosure>();
+    for (const c of closures) {
+      const day = parseInt(c.date.split('-')[2]);
+      map.set(day, c);
+    }
+    return map;
+  }, [closures]);
+
+  const fullOffDaysCount = useMemo(() => {
+    return closures.filter((c) => c.status === 'FULL_OFF').length;
+  }, [closures]);
 
   // Fast lookup map: `${memberId}_${day}` -> MealEntry
   const mealMap = useMemo(() => {
@@ -85,7 +108,7 @@ export const MealGrid: React.FC<MealGridProps> = ({
     });
   };
 
-  // Calculate daily totals for bottom row
+  // Calculate daily totals for bottom row (respecting FULL_OFF closures)
   const dailyTotals = useMemo(() => {
     const totals: { [day: number]: number } = {};
     for (let d = 1; d <= daysInMonth; d++) {
@@ -94,13 +117,15 @@ export const MealGrid: React.FC<MealGridProps> = ({
     for (const entry of mealEntries) {
       if (entry.month === selectedMonth) {
         const day = parseInt(entry.date.split('-')[2]);
-        if (day && totals[day] !== undefined) {
+        const closure = closureByDay.get(day);
+        const isOff = closure?.status === 'FULL_OFF';
+        if (day && totals[day] !== undefined && !isOff) {
           totals[day] += entry.count || 0;
         }
       }
     }
     return totals;
-  }, [mealEntries, selectedMonth, daysInMonth]);
+  }, [mealEntries, selectedMonth, daysInMonth, closureByDay]);
 
   // Monthly Grand Total
   const grandTotalMeals = useMemo(() => {
@@ -109,6 +134,21 @@ export const MealGrid: React.FC<MealGridProps> = ({
 
   return (
     <div className="bg-white rounded-2xl border border-slate-200/90 shadow-subtle overflow-hidden">
+      {/* Holiday / Closure Alert Banner */}
+      {fullOffDaysCount > 0 && (
+        <div className="px-5 py-2.5 bg-rose-50 border-b border-rose-200 flex items-center justify-between text-xs text-rose-800 font-medium">
+          <div className="flex items-center gap-2">
+            <CalendarOff className="w-4 h-4 text-rose-600 shrink-0" />
+            <span>
+              <strong>{fullOffDaysCount} Full Meal OFF days</strong> recorded in {selectedMonth}. Meals on closed dates automatically count as 0 in financial calculations.
+            </span>
+          </div>
+          <span className="text-[11px] font-bold text-rose-600 bg-rose-100 px-2 py-0.5 rounded">
+            All Member Records Preserved
+          </span>
+        </div>
+      )}
+
       {/* Legend & Hint */}
       <div className="px-5 py-3 bg-slate-50 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3 text-xs">
         <div className="flex items-center gap-4">
@@ -159,6 +199,24 @@ export const MealGrid: React.FC<MealGridProps> = ({
               {daysArray.map((day) => {
                 const dayDate = new Date(year, month - 1, day);
                 const isWeekend = dayDate.getDay() === 5; // Friday in BD
+                const closure = closureByDay.get(day);
+                const isOff = closure?.status === 'FULL_OFF';
+
+                if (isOff) {
+                  return (
+                    <th
+                      key={day}
+                      className="py-1 px-0.5 min-w-[34px] max-w-[34px] border-r border-rose-800 bg-rose-700 text-white font-mono text-[10px]"
+                      title={`Mess Closed: ${closure?.reason || 'Holiday'} (All meals = 0)`}
+                    >
+                      <div className="font-bold">{day}</div>
+                      <div className="text-[8px] bg-rose-950/80 rounded px-0.5 text-rose-200 uppercase font-black tracking-tighter">
+                        OFF
+                      </div>
+                    </th>
+                  );
+                }
+
                 return (
                   <th
                     key={day}
@@ -180,11 +238,15 @@ export const MealGrid: React.FC<MealGridProps> = ({
 
           <tbody className="divide-y divide-slate-100 text-slate-700 font-sans">
             {filteredMembers.map((member, idx) => {
-              // Calculate member month total
+              // Calculate member month total (excluding FULL_OFF days)
               let memberTotal = 0;
               for (let d = 1; d <= daysInMonth; d++) {
-                const entry = mealMap.get(`${member.id}_${d}`);
-                memberTotal += entry?.count || 0;
+                const closure = closureByDay.get(d);
+                const isOff = closure?.status === 'FULL_OFF';
+                if (!isOff) {
+                  const entry = mealMap.get(`${member.id}_${d}`);
+                  memberTotal += entry?.count || 0;
+                }
               }
 
               const isEven = idx % 2 === 0;
@@ -210,12 +272,22 @@ export const MealGrid: React.FC<MealGridProps> = ({
                   {daysArray.map((day) => {
                     const entry = mealMap.get(`${member.id}_${day}`);
                     const status = entry?.type || 'Blank';
+                    const closure = closureByDay.get(day);
+                    const isOff = closure?.status === 'FULL_OFF';
 
                     let cellStyle =
                       'text-slate-300 hover:bg-slate-200/70 cursor-pointer font-mono';
                     let cellText = '-';
 
-                    if (status === 'ON') {
+                    if (isOff) {
+                      // Day is FULL MEAL OFF (Holiday/Closure)
+                      // Raw entry is preserved in DB, but counts as 0
+                      cellStyle =
+                        status === 'ON' || status === 'Double'
+                          ? 'bg-rose-100 text-rose-700 font-bold border-rose-200 cursor-pointer hover:bg-rose-200'
+                          : 'bg-rose-50 text-rose-300 font-mono cursor-pointer hover:bg-rose-100';
+                      cellText = '0';
+                    } else if (status === 'ON') {
                       cellStyle =
                         'bg-emerald-500 text-white font-bold hover:bg-emerald-600 shadow-xs cursor-pointer';
                       cellText = '1';
@@ -229,12 +301,16 @@ export const MealGrid: React.FC<MealGridProps> = ({
                       cellText = '✕';
                     }
 
+                    const tooltipText = isOff
+                      ? `${member.name} (Day ${day}): Full OFF (${closure?.reason || 'Holiday'}). Effective: 0 (Raw: ${status})`
+                      : `${member.name} (Day ${day}): ${status}`;
+
                     return (
                       <td
                         key={day}
                         onClick={() => handleCellClick(member.id, day)}
                         className={`p-0 border-r border-slate-100 h-8 transition-colors ${cellStyle}`}
-                        title={`${member.name} (Day ${day}): ${status}`}
+                        title={tooltipText}
                       >
                         <div className="w-full h-full flex items-center justify-center text-[11px]">
                           {cellText}
