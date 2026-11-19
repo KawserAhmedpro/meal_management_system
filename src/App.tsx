@@ -1,0 +1,38 @@
+import React from 'react';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { AppProvider } from './context/AppContext';
+import { Layout } from './components/layout/Layout';
+import { DashboardPage } from './modules/dashboard/DashboardPage';
+import { MembersPage } from './modules/members/MembersPage';
+import { MealManagementPage } from './modules/meals/MealManagementPage';
+import { ExpensesPage } from './modules/expenses/ExpensesPage';
+import { TransactionsPage } from './modules/transactions/TransactionsPage';
+import { ReportsPage } from './modules/reports/ReportsPage';
+import { PrintCenterPage } from './modules/print/PrintCenterPage';
+import { BackupRestorePage } from './modules/backup/BackupRestorePage';
+import { SettingsPage } from './modules/settings/SettingsPage';
+
+export function App() {
+  return (
+    <AppProvider>
+      <BrowserRouter>
+        <Routes>
+          <Route path="/" element={<Layout />}>
+            <Route index element={<DashboardPage />} />
+            <Route path="members" element={<MembersPage />} />
+            <Route path="meals" element={<MealManagementPage />} />
+            <Route path="expenses" element={<ExpensesPage />} />
+            <Route path="transactions" element={<TransactionsPage />} />
+            <Route path="reports" element={<ReportsPage />} />
+            <Route path="print" element={<PrintCenterPage />} />
+            <Route path="backup" element={<BackupRestorePage />} />
+            <Route path="settings" element={<SettingsPage />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Route>
+        </Routes>
+      </BrowserRouter>
+    </AppProvider>
+  );
+}
+
+export default App;
