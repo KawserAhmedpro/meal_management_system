@@ -1,12 +1,19 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { Utensils, Shield, Lock, Mail, AlertCircle, ArrowRight, Database } from 'lucide-react';
 
 export const LoginPage: React.FC = () => {
-  const { login, isFirebaseConfigured, missingConfigKeys } = useAuth();
+  const { user, isAdmin, login, isFirebaseConfigured, missingConfigKeys } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+
+  // If already logged in as Admin, redirect immediately to dashboard
+  useEffect(() => {
+    if (user && isAdmin) {
+      navigate('/', { replace: true });
+    }
+  }, [user, isAdmin, navigate]);
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
