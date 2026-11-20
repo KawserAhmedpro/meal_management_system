@@ -2,17 +2,10 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
 import './index.css';
+import { registerServiceWorker } from './utils/serviceWorkerRegistration';
 
-// Register service worker for offline PWA functionality
-if ('serviceWorker' in navigator && import.meta.env.PROD) {
-  window.addEventListener('load', () => {
-    const swUrl = `${import.meta.env.BASE_URL}sw.js`;
-    navigator.serviceWorker
-      .register(swUrl)
-      .then((reg) => console.log('ServiceWorker registered:', reg.scope))
-      .catch((err) => console.log('ServiceWorker registration failed:', err));
-  });
-}
+// Register service worker with automatic update detection and offline support
+registerServiceWorker();
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>

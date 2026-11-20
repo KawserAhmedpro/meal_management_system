@@ -8,6 +8,7 @@ import { MemberModal } from '../../modules/members/MemberModal';
 import { ExpenseModal } from '../../modules/expenses/ExpenseModal';
 import { DepositModal } from '../../modules/transactions/DepositModal';
 import { DailyMealQuickModal } from '../../modules/meals/DailyMealQuickModal';
+import { PWAUpdateNotification } from '../common/PWAUpdateNotification';
 import { AlertCircle, ShieldAlert, X } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
@@ -86,6 +87,9 @@ export const Layout: React.FC = () => {
           onClose={() => setActiveQuickModal(null)}
         />
       )}
+
+      {/* PWA New Version Available Update Prompt */}
+      <PWAUpdateNotification />
     </div>
   );
 };
