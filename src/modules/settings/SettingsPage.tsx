@@ -29,6 +29,7 @@ import {
 } from 'lucide-react';
 import { db } from '../../db';
 import { DEFAULT_SETTINGS } from '../../db/seedData';
+import { formatMonthName } from '../../utils/formatters';
 
 interface SettingsFormValues {
   managerName: string;
@@ -51,6 +52,7 @@ export const SettingsPage: React.FC = () => {
     updateSettings,
     publicPortalUrl,
     syncPublicPortal,
+    syncAllPublicPortalMonths,
     isPublicSyncing,
     lastPublicSyncedAt,
     selectedMonth,
@@ -58,6 +60,53 @@ export const SettingsPage: React.FC = () => {
   const { user, logout, isFirebaseConfigured } = useAuth();
   const [successNotice, setSuccessNotice] = useState(false);
   const [portalCopied, setPortalCopied] = useState(false);
+  const [publishFeedback, setPublishFeedback] = useState<{ type: 'success' | 'error'; msg: string } | null>(null);
+
+  const handleSyncCurrentMonth = async () => {
+    setPublishFeedback(null);
+    try {
+      const ok = await syncPublicPortal(selectedMonth);
+      if (ok) {
+        setPublishFeedback({
+          type: 'success',
+          msg: `Successfully published ${formatMonthName(selectedMonth)} records to the Public Member Portal!`,
+        });
+      } else {
+        setPublishFeedback({
+          type: 'error',
+          msg: 'Could not sync. Ensure you are signed in as Admin with an active cloud connection.',
+        });
+      }
+    } catch (err: any) {
+      setPublishFeedback({
+        type: 'error',
+        msg: `Publish failed: ${err.message || 'Unknown error'}`,
+      });
+    }
+  };
+
+  const handleSyncAllMonths = async () => {
+    setPublishFeedback(null);
+    try {
+      const count = await syncAllPublicPortalMonths();
+      if (count > 0) {
+        setPublishFeedback({
+          type: 'success',
+          msg: `Successfully published all ${count} available month(s) to the Public Member Portal!`,
+        });
+      } else {
+        setPublishFeedback({
+          type: 'error',
+          msg: 'No records found to publish.',
+        });
+      }
+    } catch (err: any) {
+      setPublishFeedback({
+        type: 'error',
+        msg: `Publish failed: ${err.message || 'Unknown error'}`,
+      });
+    }
+  };
 
   const {
     register,
@@ -385,6 +434,23 @@ export const SettingsPage: React.FC = () => {
               </div>
             </div>
 
+            {publishFeedback && (
+              <div
+                className={`p-3 rounded-xl border text-xs flex items-center gap-2 ${
+                  publishFeedback.type === 'success'
+                    ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                    : 'bg-rose-50 border-rose-200 text-rose-800'
+                }`}
+              >
+                {publishFeedback.type === 'success' ? (
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                ) : (
+                  <ShieldCheck className="w-4 h-4 text-rose-600 shrink-0" />
+                )}
+                <span>{publishFeedback.msg}</span>
+              </div>
+            )}
+
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2 border-t border-slate-200/60 text-xs">
               <div>
                 <p className="text-slate-600 font-medium flex items-center gap-1.5">
@@ -396,20 +462,33 @@ export const SettingsPage: React.FC = () => {
                 </p>
               </div>
 
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={isPublicSyncing}
-                onClick={() => syncPublicPortal(selectedMonth)}
-                icon={<RefreshCw className={`w-3.5 h-3.5 text-emerald-600 ${isPublicSyncing ? 'animate-spin' : ''}`} />}
-              >
-                {isPublicSyncing ? 'Publishing...' : 'Sync / Publish Now'}
-              </Button>
+              <div className="flex items-center gap-2 shrink-0">
+                <Button
+                  type="button"
+                  variant="primary"
+                  size="sm"
+                  disabled={isPublicSyncing}
+                  onClick={handleSyncCurrentMonth}
+                  icon={<RefreshCw className={`w-3.5 h-3.5 text-white ${isPublicSyncing ? 'animate-spin' : ''}`} />}
+                >
+                  {isPublicSyncing ? 'Publishing...' : `Publish ${formatMonthName(selectedMonth)}`}
+                </Button>
+
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={isPublicSyncing}
+                  onClick={handleSyncAllMonths}
+                  icon={<RefreshCw className={`w-3.5 h-3.5 text-slate-600 ${isPublicSyncing ? 'animate-spin' : ''}`} />}
+                >
+                  Publish All Months
+                </Button>
+              </div>
             </div>
 
             {lastPublicSyncedAt && (
-              <p className="text-[11px] text-slate-400">
+              <p className="text-[11px] text-emerald-600 font-medium">
                 Last published to public portal: {lastPublicSyncedAt.toLocaleTimeString()} ({lastPublicSyncedAt.toLocaleDateString()})
               </p>
             )}

@@ -27,6 +27,29 @@ import { calculateMonthSummary } from '../utils/calculations';
 export const PUBLIC_PORTAL_COLLECTION = 'public_portal';
 
 /**
+ * Recursively removes undefined fields from an object or array.
+ * Firestore strictly rejects documents containing undefined values.
+ */
+export function removeUndefined<T>(obj: T): T {
+  if (obj === null || obj === undefined) {
+    return null as unknown as T;
+  }
+  if (Array.isArray(obj)) {
+    return obj.map((item) => removeUndefined(item)) as unknown as T;
+  }
+  if (typeof obj === 'object') {
+    const cleaned: Record<string, any> = {};
+    for (const [key, val] of Object.entries(obj)) {
+      if (val !== undefined) {
+        cleaned[key] = removeUndefined(val);
+      }
+    }
+    return cleaned as T;
+  }
+  return obj;
+}
+
+/**
  * Returns the shareable Public Portal URL
  */
 export function getPublicPortalUrl(): string {
@@ -109,7 +132,7 @@ export function sanitizeAndBuildPublicData(
       day: d,
       totalMeals: dayTotalMeals,
       status: closure?.status || 'NORMAL',
-      closureReason: closure?.reason,
+      closureReason: closure?.reason || '',
       onCount,
       doubleCount,
       offCount,
@@ -146,7 +169,7 @@ export function sanitizeAndBuildPublicData(
       title: exp.title,
       amount: exp.amount,
       category: exp.category || 'General Market',
-      notes: exp.notes,
+      notes: exp.notes || '',
     };
   });
 
@@ -160,7 +183,7 @@ export function sanitizeAndBuildPublicData(
     id: m.id,
     name: m.name,
     room: m.room,
-    floor: m.floor,
+    floor: m.floor || '',
     status: m.status,
     totalMeals: memberTotalMealsMap.get(m.id) || 0,
   }));
@@ -198,7 +221,8 @@ export async function publishMonthToPublicPortal(monthData: PublicMonthData): Pr
   }
 
   const monthDocRef = doc(firestore, PUBLIC_PORTAL_COLLECTION, monthData.month);
-  await setDoc(monthDocRef, monthData, { merge: true });
+  const cleanData = removeUndefined(monthData);
+  await setDoc(monthDocRef, cleanData, { merge: true });
 }
 
 /**
@@ -210,7 +234,8 @@ export async function publishPublicPortalMeta(meta: PublicPortalMeta): Promise<v
   }
 
   const metaDocRef = doc(firestore, PUBLIC_PORTAL_COLLECTION, 'meta');
-  await setDoc(metaDocRef, meta, { merge: true });
+  const cleanMeta = removeUndefined(meta);
+  await setDoc(metaDocRef, cleanMeta, { merge: true });
 }
 
 /**

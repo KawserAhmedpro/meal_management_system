@@ -85,7 +85,8 @@ export interface DataContextType {
   isPublicSyncing: boolean;
   lastPublicSyncedAt: Date | null;
   publicPortalUrl: string;
-  syncPublicPortal: (monthToSync?: string) => Promise<void>;
+  syncPublicPortal: (monthToSync?: string) => Promise<boolean>;
+  syncAllPublicPortalMonths: () => Promise<number>;
 }
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
@@ -500,8 +501,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [lastPublicSyncedAt, setLastPublicSyncedAt] = useState<Date | null>(null);
   const publicPortalUrl = useMemo(() => getPublicPortalUrl(), []);
 
-  const syncPublicPortal = async (monthToSync?: string): Promise<void> => {
-    if (!isCloudActive) return;
+  const syncPublicPortal = async (monthToSync?: string): Promise<boolean> => {
+    if (!isCloudActive) {
+      console.warn('Cannot sync public portal: Cloud is not active or user is not Admin.');
+      return false;
+    }
     const targetMonth = monthToSync || selectedMonth;
     setIsPublicSyncing(true);
 
@@ -539,8 +543,59 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       });
 
       setLastPublicSyncedAt(new Date());
+      return true;
     } catch (err) {
-      console.warn('Failed to synchronize public portal:', err);
+      console.error('Failed to synchronize public portal:', err);
+      throw err;
+    } finally {
+      setIsPublicSyncing(false);
+    }
+  };
+
+  const syncAllPublicPortalMonths = async (): Promise<number> => {
+    if (!isCloudActive) {
+      console.warn('Cannot sync public portal: Cloud is not active or user is not Admin.');
+      return 0;
+    }
+    setIsPublicSyncing(true);
+    let count = 0;
+
+    try {
+      const allMonthsSet = new Set<string>();
+      allMonthsSet.add(selectedMonth);
+      for (const m of mealEntries) if (m.month) allMonthsSet.add(m.month);
+      for (const e of expenses) if (e.month) allMonthsSet.add(e.month);
+      const monthsList = Array.from(allMonthsSet);
+
+      for (const m of monthsList) {
+        const publicData = sanitizeAndBuildPublicData(
+          m,
+          members,
+          mealEntries,
+          expenses,
+          dailyClosures,
+          settings,
+          managers
+        );
+        await publishMonthToPublicPortal(publicData);
+        count++;
+      }
+
+      await publishPublicPortalMeta({
+        messName: settings.messName || 'DINING MANAGEMENT SYSTEM',
+        institutionName: settings.institutionName || '',
+        hallName: settings.hallName || '',
+        currencySymbol: settings.currencySymbol || '৳',
+        activeMonth: selectedMonth,
+        availableMonths: monthsList.sort().reverse(),
+        lastPublishedAt: Date.now(),
+      });
+
+      setLastPublicSyncedAt(new Date());
+      return count;
+    } catch (err) {
+      console.error('Failed to publish all public portal months:', err);
+      throw err;
     } finally {
       setIsPublicSyncing(false);
     }
@@ -608,6 +663,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         lastPublicSyncedAt,
         publicPortalUrl,
         syncPublicPortal,
+        syncAllPublicPortalMonths,
       }}
     >
       {children}
