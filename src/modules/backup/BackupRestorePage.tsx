@@ -5,6 +5,7 @@ import { useApp } from '../../context/AppContext';
 import { parseExcelWorkbook, ExcelImportPreview } from '../../utils/excelParser';
 import { exportMonthToExcel } from '../../utils/excelExporter';
 import { formatDate } from '../../utils/formatters';
+import { MigrationWizard } from './MigrationWizard';
 import { Button } from '../../components/ui/Button';
 import { Card, CardHeader, CardContent } from '../../components/ui/Card';
 import { Badge } from '../../components/ui/Badge';
@@ -242,6 +243,9 @@ export const BackupRestorePage: React.FC = () => {
           </button>
         </div>
       )}
+
+      {/* Cloud Firestore Migration & Multi-Device Sync Wizard */}
+      <MigrationWizard />
 
       {/* Backup Status and Device Storage Warning Card */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

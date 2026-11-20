@@ -23,6 +23,7 @@ export default defineConfig({
         assetFileNames: 'assets/[name]-[hash].[ext]',
         manualChunks: {
           vendor: ['react', 'react-dom', 'react-router-dom'],
+          firebase: ['firebase/app', 'firebase/auth', 'firebase/firestore'],
           dexie: ['dexie', 'dexie-react-hooks'],
           charts: ['recharts'],
           xlsx: ['xlsx'],

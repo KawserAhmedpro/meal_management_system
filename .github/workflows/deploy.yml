@@ -38,6 +38,14 @@ jobs:
         run: npm ci
 
       - name: Build project
+        env:
+          VITE_FIREBASE_API_KEY: ${{ secrets.VITE_FIREBASE_API_KEY || vars.VITE_FIREBASE_API_KEY || 'AIzaSyA9JX2F-bsOtx7CyQ2mVqLuRvz4ZV09buI' }}
+          VITE_FIREBASE_AUTH_DOMAIN: ${{ secrets.VITE_FIREBASE_AUTH_DOMAIN || vars.VITE_FIREBASE_AUTH_DOMAIN || 'dainingmanagementsystem.firebaseapp.com' }}
+          VITE_FIREBASE_PROJECT_ID: ${{ secrets.VITE_FIREBASE_PROJECT_ID || vars.VITE_FIREBASE_PROJECT_ID || 'dainingmanagementsystem' }}
+          VITE_FIREBASE_STORAGE_BUCKET: ${{ secrets.VITE_FIREBASE_STORAGE_BUCKET || vars.VITE_FIREBASE_STORAGE_BUCKET || 'dainingmanagementsystem.firebasestorage.app' }}
+          VITE_FIREBASE_MESSAGING_SENDER_ID: ${{ secrets.VITE_FIREBASE_MESSAGING_SENDER_ID || vars.VITE_FIREBASE_MESSAGING_SENDER_ID || '684588432592' }}
+          VITE_FIREBASE_APP_ID: ${{ secrets.VITE_FIREBASE_APP_ID || vars.VITE_FIREBASE_APP_ID || '1:684588432592:web:5e05bec103fe398ede32d5' }}
+          VITE_FIREBASE_ADMIN_UID: ${{ secrets.VITE_FIREBASE_ADMIN_UID || vars.VITE_FIREBASE_ADMIN_UID || 'iSOfrQnFU2gxQekEFUOjSOSeEi82' }}
         run: npm run build
 
       - name: Setup Pages

@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { formatMonthName } from '../../utils/formatters';
 import { Button } from '../ui/Button';
+import { SyncStatusIndicator } from './SyncStatusIndicator';
 
 interface TopNavProps {
   onToggleSidebar: () => void;
@@ -162,6 +163,9 @@ export const TopNav: React.FC<TopNavProps> = ({ onToggleSidebar }) => {
             <Lock className="w-4 h-4" />
           </button>
         )}
+
+        {/* Cloud Sync Status Indicator */}
+        <SyncStatusIndicator />
 
         {/* Admin profile pill */}
         <div className="flex items-center gap-2 pl-2 border-l border-slate-200">

@@ -1,6 +1,7 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
+import { useAuth } from '../../context/AuthContext';
 import {
   LayoutDashboard,
   Users,
@@ -14,6 +15,8 @@ import {
   ShieldCheck,
   UserCheck,
   X,
+  Cloud,
+  LogOut,
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -22,7 +25,8 @@ interface SidebarProps {
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
-  const { settings } = useApp();
+  const { settings, isCloudConnected } = useApp();
+  const { user, logout } = useAuth();
 
   const navItems = [
     { to: '/', label: 'Dashboard', icon: LayoutDashboard },
@@ -107,19 +111,31 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
         </div>
 
         {/* Footer / Status */}
-        <div className="p-4 border-t border-slate-800/80 bg-slate-950/30">
-          <div className="flex items-center justify-between text-xs text-slate-400 mb-1.5">
+        <div className="p-4 border-t border-slate-800/80 bg-slate-950/30 space-y-2">
+          <div className="flex items-center justify-between text-xs text-slate-400">
             <span className="flex items-center gap-1.5 font-medium text-emerald-400">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-              Local IndexedDB
+              <span className={`w-2 h-2 rounded-full ${isCloudConnected ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'}`} />
+              {isCloudConnected ? 'Cloud Firestore' : 'Local IndexedDB'}
             </span>
             <span className="text-[10px] bg-slate-800 px-2 py-0.5 rounded-full text-slate-300">
               v1.0 Admin
             </span>
           </div>
-          <div className="flex items-center gap-1 text-[11px] text-slate-400">
-            <ShieldCheck className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
-            <span className="truncate">Local-First Storage</span>
+
+          <div className="flex items-center justify-between text-[11px] text-slate-400 pt-1">
+            <div className="flex items-center gap-1">
+              <ShieldCheck className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+              <span className="truncate">{isCloudConnected ? 'Multi-Device Sync' : 'Local-First Storage'}</span>
+            </div>
+            {user && (
+              <button
+                onClick={logout}
+                className="text-slate-400 hover:text-rose-400 p-1 rounded transition"
+                title="Sign Out Admin"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+              </button>
+            )}
           </div>
         </div>
       </aside>

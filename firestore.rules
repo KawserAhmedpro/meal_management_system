@@ -1,0 +1,26 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // =========================================================================
+    // DINING MANAGEMENT SYSTEM — Firestore Security Rules
+    //
+    // CRITICAL SECURITY ENFORCEMENT:
+    // Only the authenticated Admin UID is permitted to read or write any data.
+    // Public reads or writes are strictly blocked.
+    //
+    // Authorized Admin UID: iSOfrQnFU2gxQekEFUOjSOSeEi82
+    // =========================================================================
+
+    function isAuthorizedAdmin() {
+      return request.auth != null && (
+        request.auth.uid == 'iSOfrQnFU2gxQekEFUOjSOSeEi82' ||
+        (request.auth.token.keys().hasAny(['admin']) && request.auth.token.admin == true)
+      );
+    }
+
+    // Global protection across all collections (members, mealEntries, expenses, deposits, etc.)
+    match /{document=**} {
+      allow read, write: if isAuthorizedAdmin();
+    }
+  }
+}

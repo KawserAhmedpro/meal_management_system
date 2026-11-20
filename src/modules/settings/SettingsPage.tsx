@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useApp } from '../../context/AppContext';
+import { useAuth } from '../../context/AuthContext';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Select } from '../../components/ui/Select';
 import { Card, CardHeader, CardContent } from '../../components/ui/Card';
+import { Badge } from '../../components/ui/Badge';
 import {
   Settings,
   Shield,
@@ -15,6 +17,11 @@ import {
   Unlock,
   BellRing,
   RotateCcw,
+  Cloud,
+  LogOut,
+  Database,
+  ShieldCheck,
+  Server,
 } from 'lucide-react';
 import { db } from '../../db';
 import { DEFAULT_SETTINGS } from '../../db/seedData';
@@ -36,6 +43,7 @@ interface SettingsFormValues {
 
 export const SettingsPage: React.FC = () => {
   const { settings, updateSettings } = useApp();
+  const { user, logout, isFirebaseConfigured } = useAuth();
   const [successNotice, setSuccessNotice] = useState(false);
 
   const {
@@ -258,6 +266,62 @@ export const SettingsPage: React.FC = () => {
                 helperText="Show reminder banner if no backup made within this period"
               />
             </div>
+          </CardContent>
+        </Card>
+
+        {/* Section 5: Firebase Backend & Cloud Synchronization Status */}
+        <Card className="border-emerald-200/80 bg-gradient-to-b from-white to-emerald-50/20">
+          <CardHeader
+            title="Firebase Backend & Multi-Device Cloud Sync"
+            subtitle="Cloud Firestore integration status, Admin authentication, and offline synchronization"
+          />
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 text-xs">
+              <div className="p-3 bg-white rounded-xl border border-slate-200">
+                <span className="text-slate-500 block mb-1">Firebase Configuration</span>
+                {isFirebaseConfigured ? (
+                  <Badge variant="success">Configured & Active</Badge>
+                ) : (
+                  <Badge variant="warning">Local-Only Mode</Badge>
+                )}
+              </div>
+
+              <div className="p-3 bg-white rounded-xl border border-slate-200">
+                <span className="text-slate-500 block mb-1">Backend Database</span>
+                <span className="font-semibold text-slate-800 flex items-center gap-1.5">
+                  <Cloud className="w-3.5 h-3.5 text-emerald-600" />
+                  Cloud Firestore + Offline Cache
+                </span>
+              </div>
+
+              <div className="p-3 bg-white rounded-xl border border-slate-200">
+                <span className="text-slate-500 block mb-1">Admin Session</span>
+                {user ? (
+                  <span className="font-semibold text-emerald-700 truncate block" title={user.email || ''}>
+                    {user.email}
+                  </span>
+                ) : (
+                  <span className="text-slate-500">Not Signed In</span>
+                )}
+              </div>
+            </div>
+
+            {user && (
+              <div className="pt-2 flex items-center justify-between border-t border-slate-100">
+                <p className="text-xs text-slate-500">
+                  Signed in with authorized Admin UID: <code className="bg-slate-100 px-1.5 py-0.5 rounded text-[11px] font-mono text-slate-800">{user.uid}</code>
+                </p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={logout}
+                  icon={<LogOut className="w-3.5 h-3.5 text-rose-600" />}
+                >
+                  Sign Out Admin
+                </Button>
+              </div>
+            )}
           </CardContent>
         </Card>
 

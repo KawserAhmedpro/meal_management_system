@@ -1,34 +1,17 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import { useLiveQuery } from 'dexie-react-hooks';
-import { db, initializeDatabase, requestPersistentStorage } from '../db';
-import { SystemSettings } from '../types';
-import { DEFAULT_SETTINGS } from '../db/seedData';
+import React, { createContext, useContext, useEffect, useState } from 'react';
+import { initializeDatabase, requestPersistentStorage } from '../db';
+import { DataProvider, useData, DataContextType } from './DataContext';
 
-interface AppContextType {
-  selectedMonth: string;
-  setSelectedMonth: (month: string) => void;
-  settings: SystemSettings;
-  updateSettings: (newSettings: Partial<SystemSettings>) => Promise<void>;
-  isPinLocked: boolean;
-  unlockWithPin: (pin: string) => boolean;
-  lockApp: () => void;
-  globalSearch: string;
-  setGlobalSearch: (q: string) => void;
-  activeQuickModal: 'meal' | 'expense' | 'deposit' | 'member' | null;
-  setActiveQuickModal: (modal: 'meal' | 'expense' | 'deposit' | 'member' | null) => void;
+interface AppContextType extends DataContextType {
   isDbReady: boolean;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
-export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [selectedMonth, setSelectedMonthState] = useState<string>('2026-03');
-  const [isPinLocked, setIsPinLocked] = useState<boolean>(false);
-  const [globalSearch, setGlobalSearch] = useState<string>('');
-  const [activeQuickModal, setActiveQuickModal] = useState<'meal' | 'expense' | 'deposit' | 'member' | null>(null);
+const AppInnerProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const data = useData();
   const [isDbReady, setIsDbReady] = useState<boolean>(false);
 
-  // Initialize DB and request persistent storage on mount
   useEffect(() => {
     async function init() {
       await initializeDatabase();
@@ -38,84 +21,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     init();
   }, []);
 
-  // Live query for settings
-  const liveSettings = useLiveQuery(() => db.settings.get('app_settings'), []);
-  const settings: SystemSettings = liveSettings || DEFAULT_SETTINGS;
-
-  const initialLockChecked = React.useRef(false);
-
-  // Initialize selectedMonth and lock state from settings
-  useEffect(() => {
-    if (settings.selectedMonth && selectedMonth === '2026-03' && settings.selectedMonth !== '2026-03') {
-      setSelectedMonthState(settings.selectedMonth);
-    }
-    
-    // Only lock on initial application load if PIN lock is enabled
-    if (!initialLockChecked.current) {
-      if (settings.pinLockEnabled && settings.pinCode && settings.pinCode.trim().length > 0) {
-        setIsPinLocked(true);
-      }
-      initialLockChecked.current = true;
-    } else {
-      // If PIN lock is disabled in settings, ensure app is unlocked
-      if (!settings.pinLockEnabled) {
-        setIsPinLocked(false);
-      }
-    }
-  }, [settings.selectedMonth, settings.pinLockEnabled, settings.pinCode]);
-
-  const setSelectedMonth = async (month: string) => {
-    setSelectedMonthState(month);
-    const current = (await db.settings.get('app_settings')) || DEFAULT_SETTINGS;
-    await db.settings.put({ ...current, selectedMonth: month, id: 'app_settings' });
-  };
-
-  const updateSettings = async (newSettings: Partial<SystemSettings>) => {
-    const current = (await db.settings.get('app_settings')) || DEFAULT_SETTINGS;
-    await db.settings.put({
-      ...current,
-      ...newSettings,
-      id: 'app_settings',
-    });
-  };
-
-  const unlockWithPin = (enteredPin: string): boolean => {
-    if (!settings.pinLockEnabled) {
-      setIsPinLocked(false);
-      return true;
-    }
-    if (enteredPin === settings.pinCode) {
-      setIsPinLocked(false);
-      return true;
-    }
-    return false;
-  };
-
-  const lockApp = () => {
-    if (settings.pinLockEnabled) {
-      setIsPinLocked(true);
-    }
-  };
-
   return (
     <AppContext.Provider
       value={{
-        selectedMonth,
-        setSelectedMonth,
-        settings,
-        updateSettings,
-        isPinLocked,
-        unlockWithPin,
-        lockApp,
-        globalSearch,
-        setGlobalSearch,
-        activeQuickModal,
-        setActiveQuickModal,
+        ...data,
         isDbReady,
       }}
     >
       {children}
     </AppContext.Provider>
+  );
+};
+
+export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  return (
+    <DataProvider>
+      <AppInnerProvider>{children}</AppInnerProvider>
+    </DataProvider>
   );
 };
 
