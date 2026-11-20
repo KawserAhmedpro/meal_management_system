@@ -164,7 +164,13 @@ export const LoginPage: React.FC = () => {
             </button>
           </form>
 
-          <div className="mt-6 pt-4 border-t border-slate-800/80 text-center">
+          <div className="mt-6 pt-4 border-t border-slate-800/80 text-center space-y-3">
+            <Link
+              to="/public"
+              className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-400 hover:text-emerald-300 transition"
+            >
+              <span>Looking for Member Dining Updates? Open Public Portal →</span>
+            </Link>
             <p className="text-[11px] text-slate-500 leading-relaxed">
               Public self-registration is disabled for security. Admin accounts are managed directly via Firebase Console.
             </p>

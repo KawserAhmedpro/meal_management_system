@@ -12,6 +12,9 @@ import {
   ShoppingCart,
   Receipt,
   UserPlus,
+  Share2,
+  ExternalLink,
+  Check,
 } from 'lucide-react';
 import { formatMonthName } from '../../utils/formatters';
 import { Button } from '../ui/Button';
@@ -28,7 +31,18 @@ export const TopNav: React.FC<TopNavProps> = ({ onToggleSidebar }) => {
     settings,
     lockApp,
     setActiveQuickModal,
+    publicPortalUrl,
   } = useApp();
+
+  const [copiedLink, setCopiedLink] = React.useState(false);
+
+  const handleCopyPublicLink = () => {
+    if (!publicPortalUrl) return;
+    navigator.clipboard.writeText(publicPortalUrl).then(() => {
+      setCopiedLink(true);
+      setTimeout(() => setCopiedLink(false), 2000);
+    });
+  };
 
   // Change month by delta (-1 or +1)
   const handleMonthChange = (delta: number) => {
@@ -163,6 +177,37 @@ export const TopNav: React.FC<TopNavProps> = ({ onToggleSidebar }) => {
             <Lock className="w-4 h-4" />
           </button>
         )}
+
+        {/* Public Portal Share / Link Button */}
+        <div className="hidden md:flex items-center gap-1">
+          <button
+            onClick={handleCopyPublicLink}
+            title={`Copy Public Portal Link (${publicPortalUrl})`}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 transition-colors"
+          >
+            {copiedLink ? (
+              <>
+                <Check className="w-3.5 h-3.5 text-emerald-600" />
+                <span>Copied!</span>
+              </>
+            ) : (
+              <>
+                <Share2 className="w-3.5 h-3.5 text-emerald-600" />
+                <span>Public Link</span>
+              </>
+            )}
+          </button>
+
+          <a
+            href={`${import.meta.env.BASE_URL}public`}
+            target="_blank"
+            rel="noopener noreferrer"
+            title="Open Public Member Portal"
+            className="p-1.5 rounded-xl text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors border border-slate-200"
+          >
+            <ExternalLink className="w-3.5 h-3.5" />
+          </a>
+        </div>
 
         {/* Cloud Sync Status Indicator */}
         <SyncStatusIndicator />

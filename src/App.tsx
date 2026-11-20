@@ -6,6 +6,7 @@ import { ErrorBoundary } from './components/ErrorBoundary';
 import { AuthGuard } from './components/auth/AuthGuard';
 import { Layout } from './components/layout/Layout';
 import { LoginPage } from './modules/auth/LoginPage';
+import { PublicPortalPage } from './modules/public/PublicPortalPage';
 import { DashboardPage } from './modules/dashboard/DashboardPage';
 import { MembersPage } from './modules/members/MembersPage';
 import { MealManagementPage } from './modules/meals/MealManagementPage';
@@ -26,6 +27,10 @@ export function App() {
             <Routes>
               {/* Public Admin Login route */}
               <Route path="/login" element={<LoginPage />} />
+
+              {/* Public Member Portal route (Read-only, no login required) */}
+              <Route path="/public" element={<PublicPortalPage />} />
+              <Route path="/portal" element={<Navigate to="/public" replace />} />
 
               {/* Protected Application Routes */}
               <Route

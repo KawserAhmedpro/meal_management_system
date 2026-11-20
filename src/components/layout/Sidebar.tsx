@@ -17,6 +17,8 @@ import {
   X,
   Cloud,
   LogOut,
+  ExternalLink,
+  Globe,
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -108,6 +110,24 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
               </NavLink>
             );
           })}
+
+          <div className="pt-3 pb-1 px-3 text-[10px] font-bold uppercase tracking-wider text-slate-400 flex items-center justify-between">
+            <span>Public Access</span>
+            <span className="text-[9px] text-emerald-400 bg-emerald-950/60 px-1.5 py-0.2 rounded border border-emerald-800/40">READ-ONLY</span>
+          </div>
+
+          <a
+            href={`${import.meta.env.BASE_URL}public`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-medium text-emerald-400 hover:text-emerald-300 hover:bg-emerald-950/30 border border-emerald-500/20 transition-all duration-150"
+          >
+            <div className="flex items-center gap-3">
+              <Globe className="w-4 h-4 shrink-0 text-emerald-400" />
+              <span className="truncate">Public Member Portal</span>
+            </div>
+            <ExternalLink className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+          </a>
         </div>
 
         {/* Footer / Status */}

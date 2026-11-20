@@ -9,10 +9,10 @@ import { QuickActions } from './QuickActions';
 import { DashboardCharts } from './DashboardCharts';
 import { RecentExpenses } from './RecentExpenses';
 import { RecentDeposits } from './RecentDeposits';
-import { Calendar, Building, MapPin } from 'lucide-react';
+import { Calendar, Building, MapPin, Globe, Share2, ExternalLink } from 'lucide-react';
 
 export const DashboardPage: React.FC = () => {
-  const { selectedMonth, settings } = useApp();
+  const { selectedMonth, settings, publicPortalUrl } = useApp();
 
   // Reactive live queries from IndexedDB
   const members = useLiveQuery(() => db.members.toArray(), []) || [];
@@ -98,6 +98,48 @@ export const DashboardPage: React.FC = () => {
               </span>
             </div>
           </div>
+        </div>
+      </div>
+
+      {/* Public Portal Quick Banner */}
+      <div className="bg-emerald-50/60 border border-emerald-200/80 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
+            <Globe className="w-5 h-5" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="font-bold text-slate-800 text-sm">Public Member Portal is Live</span>
+              <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">READ-ONLY</span>
+            </div>
+            <p className="text-xs text-slate-500">
+              Members can view daily meals, market expenses, and meal rates without login. Personal deposits and dues are strictly protected.
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            onClick={() => {
+              if (publicPortalUrl) {
+                navigator.clipboard.writeText(publicPortalUrl);
+                alert('Public Portal link copied to clipboard!\n' + publicPortalUrl);
+              }
+            }}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 transition shadow-xs"
+          >
+            <Share2 className="w-3.5 h-3.5 text-emerald-600" />
+            <span>Copy Link</span>
+          </button>
+          <a
+            href={`${import.meta.env.BASE_URL}public`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white transition shadow-xs"
+          >
+            <span>Open Portal</span>
+            <ExternalLink className="w-3.5 h-3.5" />
+          </a>
         </div>
       </div>
 

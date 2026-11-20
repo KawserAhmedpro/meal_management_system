@@ -32,6 +32,7 @@ export const COLLECTIONS = {
   DAILY_CLOSURES: 'dailyClosures',
   SETTINGS: 'settings',
   APP_METADATA: 'appMetadata',
+  PUBLIC_PORTAL: 'public_portal',
 } as const;
 
 export type SyncState =

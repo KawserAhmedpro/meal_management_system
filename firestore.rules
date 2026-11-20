@@ -2,11 +2,16 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     // =========================================================================
-    // DINING MANAGEMENT SYSTEM — Firestore Security Rules
+    // DINING MANAGEMENT SYSTEM — Cloud Firestore Security Rules
     //
     // CRITICAL SECURITY ENFORCEMENT:
-    // Only the authenticated Admin UID is permitted to read or write any data.
-    // Public reads or writes are strictly blocked.
+    // 1. Authorized Admin UID has full read and write access across all collections.
+    // 2. Unauthenticated / public visitors have READ-ONLY access strictly and
+    //    exclusively to the 'public_portal' collection and its documents.
+    // 3. Unauthenticated visitors are strictly DENIED from reading or writing
+    //    any private collection (members, mealEntries, expenses, deposits,
+    //    categories, managers, dailyClosures, settings, appMetadata).
+    // 4. Nobody except the authorized Admin can create, modify, or delete in 'public_portal'.
     //
     // Authorized Admin UID: iSOfrQnFU2gxQekEFUOjSOSeEi82
     // =========================================================================
@@ -18,7 +23,46 @@ service cloud.firestore {
       );
     }
 
-    // Global protection across all collections (members, mealEntries, expenses, deposits, etc.)
+    // 1. PUBLIC PORTAL COLLECTION:
+    // Read: Allowed for anyone (members, public visitors - no authentication required)
+    // Write: Strictly restricted to authorized Admin UID
+    match /public_portal/{document=**} {
+      allow read: if true;
+      allow write: if isAuthorizedAdmin();
+    }
+
+    // 2. STRICTLY PRIVATE COLLECTIONS:
+    // Only authorized Admin UID may read or write.
+    // Public unauthenticated access is completely blocked with permission-denied.
+    match /members/{docId} {
+      allow read, write: if isAuthorizedAdmin();
+    }
+    match /mealEntries/{docId} {
+      allow read, write: if isAuthorizedAdmin();
+    }
+    match /expenses/{docId} {
+      allow read, write: if isAuthorizedAdmin();
+    }
+    match /deposits/{docId} {
+      allow read, write: if isAuthorizedAdmin();
+    }
+    match /categories/{docId} {
+      allow read, write: if isAuthorizedAdmin();
+    }
+    match /managers/{docId} {
+      allow read, write: if isAuthorizedAdmin();
+    }
+    match /dailyClosures/{docId} {
+      allow read, write: if isAuthorizedAdmin();
+    }
+    match /settings/{docId} {
+      allow read, write: if isAuthorizedAdmin();
+    }
+    match /appMetadata/{docId} {
+      allow read, write: if isAuthorizedAdmin();
+    }
+
+    // Global default catch-all: deny all unless authorized admin
     match /{document=**} {
       allow read, write: if isAuthorizedAdmin();
     }

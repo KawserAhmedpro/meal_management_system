@@ -29,6 +29,12 @@ import {
   batchWriteDocs,
   SyncState,
 } from '../services/firestore';
+import {
+  sanitizeAndBuildPublicData,
+  publishMonthToPublicPortal,
+  publishPublicPortalMeta,
+  getPublicPortalUrl,
+} from '../services/publicPortal';
 
 export interface DataContextType {
   // Realtime Collections
@@ -74,6 +80,12 @@ export interface DataContextType {
   isPinLocked: boolean;
   unlockWithPin: (pin: string) => boolean;
   lockApp: () => void;
+
+  // Public Member Portal
+  isPublicSyncing: boolean;
+  lastPublicSyncedAt: Date | null;
+  publicPortalUrl: string;
+  syncPublicPortal: (monthToSync?: string) => Promise<void>;
 }
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
@@ -481,6 +493,80 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  // ---------------------------------------------------------------------------
+  // Public Member Portal Synchronization (Sanitized, Read-Only, No Private Data)
+  // ---------------------------------------------------------------------------
+  const [isPublicSyncing, setIsPublicSyncing] = useState<boolean>(false);
+  const [lastPublicSyncedAt, setLastPublicSyncedAt] = useState<Date | null>(null);
+  const publicPortalUrl = useMemo(() => getPublicPortalUrl(), []);
+
+  const syncPublicPortal = async (monthToSync?: string): Promise<void> => {
+    if (!isCloudActive) return;
+    const targetMonth = monthToSync || selectedMonth;
+    setIsPublicSyncing(true);
+
+    try {
+      // 1. Build sanitized public data (strictly strips deposits, balances, phone numbers, notes)
+      const publicData = sanitizeAndBuildPublicData(
+        targetMonth,
+        members,
+        mealEntries,
+        expenses,
+        dailyClosures,
+        settings,
+        managers
+      );
+
+      // 2. Publish to public_portal/{month}
+      await publishMonthToPublicPortal(publicData);
+
+      // 3. Collect distinct months available
+      const allMonthsSet = new Set<string>();
+      allMonthsSet.add(targetMonth);
+      for (const m of mealEntries) if (m.month) allMonthsSet.add(m.month);
+      for (const e of expenses) if (e.month) allMonthsSet.add(e.month);
+      const availableMonths = Array.from(allMonthsSet).sort().reverse();
+
+      // 4. Publish public_portal/meta
+      await publishPublicPortalMeta({
+        messName: settings.messName || 'DINING MANAGEMENT SYSTEM',
+        institutionName: settings.institutionName || '',
+        hallName: settings.hallName || '',
+        currencySymbol: settings.currencySymbol || '৳',
+        activeMonth: targetMonth,
+        availableMonths,
+        lastPublishedAt: Date.now(),
+      });
+
+      setLastPublicSyncedAt(new Date());
+    } catch (err) {
+      console.warn('Failed to synchronize public portal:', err);
+    } finally {
+      setIsPublicSyncing(false);
+    }
+  };
+
+  // Debounced auto-publish to Public Portal when dining data changes
+  useEffect(() => {
+    if (!isCloudActive) return;
+    if (members.length === 0 && mealEntries.length === 0 && expenses.length === 0) return;
+
+    const timer = setTimeout(() => {
+      syncPublicPortal(selectedMonth).catch(() => {});
+    }, 2500);
+
+    return () => clearTimeout(timer);
+  }, [
+    isCloudActive,
+    selectedMonth,
+    members.length,
+    mealEntries.length,
+    expenses.length,
+    dailyClosures.length,
+    settings.managerFeePerMeal,
+    settings.messName,
+  ]);
+
   return (
     <DataContext.Provider
       value={{
@@ -518,6 +604,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         isPinLocked,
         unlockWithPin,
         lockApp,
+        isPublicSyncing,
+        lastPublicSyncedAt,
+        publicPortalUrl,
+        syncPublicPortal,
       }}
     >
       {children}

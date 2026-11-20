@@ -22,6 +22,10 @@ import {
   Database,
   ShieldCheck,
   Server,
+  Share2,
+  ExternalLink,
+  Globe,
+  RefreshCw,
 } from 'lucide-react';
 import { db } from '../../db';
 import { DEFAULT_SETTINGS } from '../../db/seedData';
@@ -42,9 +46,18 @@ interface SettingsFormValues {
 }
 
 export const SettingsPage: React.FC = () => {
-  const { settings, updateSettings } = useApp();
+  const {
+    settings,
+    updateSettings,
+    publicPortalUrl,
+    syncPublicPortal,
+    isPublicSyncing,
+    lastPublicSyncedAt,
+    selectedMonth,
+  } = useApp();
   const { user, logout, isFirebaseConfigured } = useAuth();
   const [successNotice, setSuccessNotice] = useState(false);
+  const [portalCopied, setPortalCopied] = useState(false);
 
   const {
     register,
@@ -321,6 +334,84 @@ export const SettingsPage: React.FC = () => {
                   Sign Out Admin
                 </Button>
               </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Section 6: Public Member Portal & Sharing */}
+        <Card className="border-teal-200/80 bg-gradient-to-b from-white to-teal-50/20">
+          <CardHeader
+            title="Public Member Portal & Sharing"
+            subtitle="Shareable read-only portal for mess members to check daily meals, market expenses, and meal rates without login"
+          />
+          <CardContent className="space-y-4">
+            <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex-1 min-w-0">
+                <span className="text-xs font-semibold text-slate-500 block mb-1">
+                  Shareable Public Link
+                </span>
+                <input
+                  type="text"
+                  readOnly
+                  value={publicPortalUrl}
+                  className="w-full bg-white border border-slate-300 rounded-lg px-3 py-1.5 text-xs text-slate-800 font-mono outline-none select-all"
+                />
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    navigator.clipboard.writeText(publicPortalUrl);
+                    setPortalCopied(true);
+                    setTimeout(() => setPortalCopied(false), 2000);
+                  }}
+                  icon={portalCopied ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> : <Share2 className="w-3.5 h-3.5" />}
+                >
+                  {portalCopied ? 'Copied!' : 'Copy Link'}
+                </Button>
+
+                <a
+                  href={`${import.meta.env.BASE_URL}public`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs transition"
+                >
+                  <Globe className="w-3.5 h-3.5" />
+                  <span>Open Portal</span>
+                  <ExternalLink className="w-3 h-3" />
+                </a>
+              </div>
+            </div>
+
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2 border-t border-slate-200/60 text-xs">
+              <div>
+                <p className="text-slate-600 font-medium flex items-center gap-1.5">
+                  <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                  Strict Privacy Enforcement Active
+                </p>
+                <p className="text-slate-500 text-[11px] mt-0.5">
+                  Public portal contains meal attendance and market expenses only. Deposits, personal dues, advances, and phone numbers are strictly blocked by Firestore Security Rules.
+                </p>
+              </div>
+
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={isPublicSyncing}
+                onClick={() => syncPublicPortal(selectedMonth)}
+                icon={<RefreshCw className={`w-3.5 h-3.5 text-emerald-600 ${isPublicSyncing ? 'animate-spin' : ''}`} />}
+              >
+                {isPublicSyncing ? 'Publishing...' : 'Sync / Publish Now'}
+              </Button>
+            </div>
+
+            {lastPublicSyncedAt && (
+              <p className="text-[11px] text-slate-400">
+                Last published to public portal: {lastPublicSyncedAt.toLocaleTimeString()} ({lastPublicSyncedAt.toLocaleDateString()})
+              </p>
             )}
           </CardContent>
         </Card>
