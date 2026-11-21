@@ -5,63 +5,76 @@ service cloud.firestore {
     // DINING MANAGEMENT SYSTEM — Cloud Firestore Security Rules
     //
     // CRITICAL SECURITY ENFORCEMENT:
-    // 1. Authorized Admin UID has full read and write access across all collections.
-    // 2. Unauthenticated / public visitors have READ-ONLY access strictly and
-    //    exclusively to approved 'public_portal' metadata and month documents.
-    // 3. Unauthenticated visitors are strictly DENIED from reading or writing
-    //    any private collection (members, mealEntries, expenses, deposits,
-    //    categories, managers, dailyClosures, settings, appMetadata).
-    // 4. Public visitors cannot write, update, or delete ANY document.
-    // 5. Writes to 'public_portal' are strictly restricted to the authorized Admin
-    //    and MUST NOT contain any private financial or personal fields.
+    // 1. Authorized Admin UID has full access across all operational collections.
+    // 2. Strict UID validation: Only request.auth.uid == 'iSOfrQnFU2gxQekEFUOjSOSeEi82'
+    // 3. Public visitors have READ-ONLY access strictly and exclusively to
+    //    whitelisted 'public_portal/meta' and 'public_portal/{monthId}' documents.
+    // 4. Strict month format validation: YYYY-MM where MM is 01–12.
+    // 5. Strict field allowlist: Prevents any sensitive or unexpected fields from
+    //    being published to public portal documents.
+    // 6. Delete operations are separated from create/update so request.resource.data
+    //    is never evaluated on deletion.
+    // 7. Unauthenticated users cannot write, update, or delete any document.
+    // 8. All private collections (members, mealEntries, expenses, deposits,
+    //    categories, managers, dailyClosures, settings, appMetadata) are Admin-only.
     //
     // Authorized Admin UID: iSOfrQnFU2gxQekEFUOjSOSeEi82
     // =========================================================================
 
     function isAuthorizedAdmin() {
-      return request.auth != null && (
-        request.auth.uid == 'iSOfrQnFU2gxQekEFUOjSOSeEi82' ||
-        (request.auth.token.keys().hasAny(['admin']) && request.auth.token.admin == true)
-      );
+      return request.auth != null && request.auth.uid == 'iSOfrQnFU2gxQekEFUOjSOSeEi82';
     }
 
-    // Helper: Validates that payload contains NO private financial or personal member fields
-    function hasNoPrivateFields() {
-      return !request.resource.data.keys().hasAny([
-        'deposits',
-        'totalDeposits',
-        'due',
-        'totalDue',
-        'advance',
-        'totalAdvance',
-        'phone',
-        'personalNotes',
-        'paymentHistory'
+    function isValidMonthId(monthId) {
+      return monthId.matches('^[0-9]{4}-(0[1-9]|1[0-2])$');
+    }
+
+    // Strict field allowlist for public_portal/meta
+    function isValidMetaDoc() {
+      return request.resource.data.keys().hasOnly([
+        'messName',
+        'institutionName',
+        'hallName',
+        'currencySymbol',
+        'activeMonth',
+        'availableMonths',
+        'lastPublishedAt'
+      ]);
+    }
+
+    // Strict field allowlist for public_portal/{monthId}
+    function isValidMonthDoc() {
+      return request.resource.data.keys().hasOnly([
+        'month',
+        'summary',
+        'dailyMealSummaries',
+        'expenses',
+        'members',
+        'memberDailyMeals',
+        'publishedAt'
       ]);
     }
 
     // 1. PUBLIC PORTAL COLLECTION:
     // Whitelisted documents only. No broad wildcard matching.
 
-    // A. Meta Document:
-    // Public read-only; Admin write with private-field validation
+    // A. Meta Document: Public read-only; Admin create/update with allowlist; Admin delete
     match /public_portal/meta {
       allow read: if true;
-      allow write: if isAuthorizedAdmin() && hasNoPrivateFields();
+      allow create, update: if isAuthorizedAdmin() && isValidMetaDoc();
+      allow delete: if isAuthorizedAdmin();
     }
 
-    // B. Monthly Documents:
-    // Public read-only for valid YYYY-MM (01-12);
-    // Admin write with valid month range format and private-field validation
+    // B. Monthly Documents: Public read-only for valid YYYY-MM (01-12);
+    // Admin create/update with month format & allowlist; Admin delete
     match /public_portal/{monthId} {
-      allow read: if monthId.matches('^[0-9]{4}-(0[1-9]|1[0-2])$');
-      allow write: if isAuthorizedAdmin()
-        && monthId.matches('^[0-9]{4}-(0[1-9]|1[0-2])$')
-        && hasNoPrivateFields();
+      allow read: if isValidMonthId(monthId);
+      allow create, update: if isAuthorizedAdmin() && isValidMonthId(monthId) && isValidMonthDoc();
+      allow delete: if isAuthorizedAdmin();
     }
 
     // 2. STRICTLY PRIVATE COLLECTIONS:
-    // Only authorized Admin UID may read or write.
+    // Only authorized Admin UID may read, create, update, or delete.
     // Public unauthenticated access is completely blocked with permission-denied.
     match /members/{docId} {
       allow read, write: if isAuthorizedAdmin();

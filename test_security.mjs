@@ -52,12 +52,11 @@ assert(!rulesContent.includes('match /public_portal/{document=**}'), 'Recursive 
 assert(rulesContent.includes('match /public_portal/meta'), 'Explicit whitelist for /public_portal/meta is enforced');
 assert(rulesContent.includes("match /public_portal/{monthId}"), 'Explicit whitelist for /public_portal/{monthId} is enforced');
 assert(rulesContent.includes("monthId.matches('^[0-9]{4}-(0[1-9]|1[0-2])$')"), 'Month ID regex pattern ^[0-9]{4}-(0[1-9]|1[0-2])$ is enforced');
-assert(rulesContent.includes('hasNoPrivateFields()'), 'hasNoPrivateFields helper is enforced on public_portal writes');
-assert(rulesContent.includes('match /public_portal/meta {\n      allow read: if true;\n      allow write: if isAuthorizedAdmin() && hasNoPrivateFields();\n    }'), 'Private-field validation enforced on meta document write');
-assert(rulesContent.includes('deposits'), 'Rule forbids deposits in public_portal');
-assert(rulesContent.includes('due'), 'Rule forbids due in public_portal');
-assert(rulesContent.includes('advance'), 'Rule forbids advance in public_portal');
-assert(rulesContent.includes('phone'), 'Rule forbids phone numbers in public_portal');
+assert(rulesContent.includes('isValidMetaDoc()'), 'isValidMetaDoc strict allowlist is enforced on meta writes');
+assert(rulesContent.includes('isValidMonthDoc()'), 'isValidMonthDoc strict allowlist is enforced on month writes');
+assert(rulesContent.includes('hasOnly'), 'Strict field allowlist via keys().hasOnly() is enforced');
+assert(rulesContent.includes('allow delete: if isAuthorizedAdmin();'), 'Safe deletion rule without request.resource evaluation is enforced');
+assert(!rulesContent.includes('request.auth.token.admin'), 'Custom admin claims alternative removed for strict UID enforcement');
 
 const privateCollections = [
   'members', 'mealEntries', 'expenses', 'deposits',
