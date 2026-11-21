@@ -51,8 +51,9 @@ const rulesContent = readFileSync('firestore.rules', 'utf8');
 assert(!rulesContent.includes('match /public_portal/{document=**}'), 'Recursive open wildcard match /public_portal/{document=**} is eliminated');
 assert(rulesContent.includes('match /public_portal/meta'), 'Explicit whitelist for /public_portal/meta is enforced');
 assert(rulesContent.includes("match /public_portal/{monthId}"), 'Explicit whitelist for /public_portal/{monthId} is enforced');
-assert(rulesContent.includes("monthId.matches('^[0-9]{4}-[0-9]{2}$')"), 'Month ID regex pattern ^[0-9]{4}-[0-9]{2}$ is enforced');
-assert(rulesContent.includes('hasAny'), 'Field-level rejection for private financial fields is enforced');
+assert(rulesContent.includes("monthId.matches('^[0-9]{4}-(0[1-9]|1[0-2])$')"), 'Month ID regex pattern ^[0-9]{4}-(0[1-9]|1[0-2])$ is enforced');
+assert(rulesContent.includes('hasNoPrivateFields()'), 'hasNoPrivateFields helper is enforced on public_portal writes');
+assert(rulesContent.includes('match /public_portal/meta {\n      allow read: if true;\n      allow write: if isAuthorizedAdmin() && hasNoPrivateFields();\n    }'), 'Private-field validation enforced on meta document write');
 assert(rulesContent.includes('deposits'), 'Rule forbids deposits in public_portal');
 assert(rulesContent.includes('due'), 'Rule forbids due in public_portal');
 assert(rulesContent.includes('advance'), 'Rule forbids advance in public_portal');
@@ -65,7 +66,7 @@ const privateCollections = [
 for (const col of privateCollections) {
   assert(rulesContent.includes(`match /${col}/{docId}`), `Private collection /${col} has dedicated rule block`);
 }
-assert(rulesContent.includes('match /{document=**} {\n      allow read, write: if isAuthorizedAdmin();\n    }'), 'Global catch-all fallback restricts to isAuthorizedAdmin()');
+assert(!rulesContent.includes('match /{document=**}'), 'Overlapping catch-all wildcard is eliminated to prevent rule bypasses');
 
 // -------------------------------------------------------------
 // TEST 3: Git Repository Privacy & .gitignore
