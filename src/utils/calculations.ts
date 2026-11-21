@@ -8,6 +8,7 @@ import {
   ManagerPeriod,
   DailyMealClosure,
   ManagerFeeCalculation,
+  ManagerAssignmentPeriodSummary,
 } from '../types';
 
 export function isDateFullOff(date: string, closures: DailyMealClosure[]): boolean {
@@ -242,4 +243,207 @@ export function calculateMonthSummary(
   };
 
   return { overview, memberSummaries };
+}
+
+// =============================================================================
+// MANAGER ASSIGNMENT PERIOD ACCOUNTING (SEPARATE CALCULATION LAYER)
+// =============================================================================
+
+/**
+ * Returns today's date formatted as YYYY-MM-DD in local time
+ */
+export function getTodayLocalDate(): string {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+/**
+ * Calculates the inclusive number of calendar days between two YYYY-MM-DD dates.
+ */
+export function getDaysBetweenInclusive(startDateStr: string, endDateStr: string): number {
+  if (!startDateStr || !endDateStr || startDateStr > endDateStr) return 0;
+  const [sY, sM, sD] = startDateStr.split('-').map(Number);
+  const [eY, eM, eD] = endDateStr.split('-').map(Number);
+  const startUtc = Date.UTC(sY, sM - 1, sD);
+  const endUtc = Date.UTC(eY, eM - 1, eD);
+  return Math.round((endUtc - startUtc) / (1000 * 60 * 60 * 24)) + 1;
+}
+
+/**
+ * Determines whether an expense item represents raw market/bazaar food procurement
+ * versus fixed utility / salary overhead.
+ */
+export function isMarketExpense(exp: { category?: string; title?: string }): boolean {
+  const cat = (exp.category || '').toLowerCase().trim();
+  const title = (exp.title || '').toLowerCase().trim();
+
+  // Explicit non-market overhead items
+  if (
+    cat.includes('gas') ||
+    cat.includes('cook') ||
+    cat.includes('salary') ||
+    cat.includes('wifi') ||
+    cat.includes('internet') ||
+    cat.includes('utility') ||
+    cat.includes('clean') ||
+    cat.includes('electric') ||
+    cat.includes('waste') ||
+    title.includes('cook salary') ||
+    title.includes('wifi bill') ||
+    title.includes('gas cylinder') ||
+    title.includes('electric bill')
+  ) {
+    return false;
+  }
+
+  // If unassigned or generic category, treat as market unless title indicates overhead
+  if (!cat || cat === 'other') {
+    return true;
+  }
+
+  return (
+    cat.includes('market') ||
+    cat.includes('bazaar') ||
+    cat.includes('grocery') ||
+    cat.includes('vegetable') ||
+    cat.includes('meat') ||
+    cat.includes('fish') ||
+    cat.includes('rice') ||
+    cat.includes('egg') ||
+    cat.includes('oil') ||
+    cat.includes('spice') ||
+    cat.includes('food') ||
+    cat.includes('chicken') ||
+    cat.includes('beef')
+  );
+}
+
+/**
+ * Calculates manager accounting based strictly on actual assignment period dates,
+ * NOT calendar months. Handles active running periods and historical resigned periods.
+ *
+ * CRITICAL ACCOUNTING RULES:
+ * 1. Meal Rate = Total Market Expenses / Total Effective Meals (Excludes manager fee).
+ * 2. Manager Fee = Total Effective Meals * Fee Rate Per Meal (Separated from meal rate).
+ * 3. OFF / FULL_OFF meals are excluded from effective meals.
+ * 4. Zero meals are handled gracefully with mealRate = 0.
+ */
+export function calculateManagerAssignmentPeriodAccounting(
+  manager: ManagerPeriod,
+  mealEntries: MealEntry[],
+  expenses: Expense[],
+  dailyClosures: DailyMealClosure[] = [],
+  defaultFeeRatePerMeal: number = 5,
+  referenceDate?: string
+): ManagerAssignmentPeriodSummary {
+  const startDate = manager.startDate;
+  const todayStr = referenceDate || getTodayLocalDate();
+
+  const isCurrentlyActive = manager.status === 'Active' || !manager.endDate;
+  const effectiveEndDate = isCurrentlyActive
+    ? todayStr
+    : (manager.endDate || todayStr);
+
+  const totalDaysAssigned = getDaysBetweenInclusive(startDate, effectiveEndDate);
+
+  // 1. Identify FULL_OFF dates within the manager's assignment window
+  const fullOffDateSet = new Set<string>();
+  for (const c of dailyClosures) {
+    if (c.status === 'FULL_OFF' && c.date >= startDate && c.date <= effectiveEndDate) {
+      fullOffDateSet.add(c.date);
+    }
+  }
+
+  // 2. Count effective meals within [startDate, effectiveEndDate] inclusive
+  let totalMeals = 0;
+  const activeServingDates = new Set<string>();
+
+  for (const entry of mealEntries) {
+    if (entry.date >= startDate && entry.date <= effectiveEndDate) {
+      const isFullOff = fullOffDateSet.has(entry.date);
+      const effectiveCount = isFullOff ? 0 : (entry.count || 0);
+      totalMeals += effectiveCount;
+      if (effectiveCount > 0) {
+        activeServingDates.add(entry.date);
+      }
+    }
+  }
+
+  // 3. Count market expenses within [startDate, effectiveEndDate] inclusive (deduplicated)
+  let totalMarketExpenses = 0;
+  let otherExpensesTotal = 0;
+  const seenExpenseIds = new Set<string>();
+
+  for (const exp of expenses) {
+    if (exp.date >= startDate && exp.date <= effectiveEndDate) {
+      if (!seenExpenseIds.has(exp.id)) {
+        seenExpenseIds.add(exp.id);
+        const amount = exp.amount || 0;
+        if (isMarketExpense(exp)) {
+          totalMarketExpenses += amount;
+        } else {
+          otherExpensesTotal += amount;
+        }
+      }
+    }
+  }
+
+  // 4. Meal Rate = Total Market Expenses / Total Effective Meals (CRITICAL: Manager fee NOT added)
+  const mealRate = totalMeals > 0
+    ? Math.round((totalMarketExpenses / totalMeals) * 100) / 100
+    : 0;
+
+  // 5. Manager Fee = Total Effective Meals * Fee Rate Per Meal
+  const feeRatePerMeal = manager.feeRateOverride !== undefined
+    ? manager.feeRateOverride
+    : defaultFeeRatePerMeal;
+
+  const totalManagerFee = Math.round(totalMeals * feeRatePerMeal * 100) / 100;
+
+  return {
+    managerId: manager.id,
+    managerName: manager.name,
+    startDate,
+    endDate: manager.endDate || null,
+    effectiveEndDate,
+    status: isCurrentlyActive ? 'Active' : 'Resigned',
+    isCurrentlyActive,
+    totalDaysAssigned,
+    totalMeals,
+    totalMarketExpenses,
+    otherExpensesTotal,
+    totalPeriodExpenses: totalMarketExpenses + otherExpensesTotal,
+    mealRate,
+    feeRatePerMeal,
+    totalManagerFee,
+    fullOffDaysCount: fullOffDateSet.size,
+    activeServingDaysCount: activeServingDates.size,
+  };
+}
+
+/**
+ * Computes assignment period accounting summaries for all registered managers.
+ */
+export function calculateAllManagerAssignmentPeriods(
+  managers: ManagerPeriod[],
+  mealEntries: MealEntry[],
+  expenses: Expense[],
+  dailyClosures: DailyMealClosure[] = [],
+  defaultFeeRatePerMeal: number = 5,
+  referenceDate?: string
+): ManagerAssignmentPeriodSummary[] {
+  const sorted = [...managers].sort((a, b) => b.startDate.localeCompare(a.startDate));
+  return sorted.map((mgr) =>
+    calculateManagerAssignmentPeriodAccounting(
+      mgr,
+      mealEntries,
+      expenses,
+      dailyClosures,
+      defaultFeeRatePerMeal,
+      referenceDate
+    )
+  );
 }

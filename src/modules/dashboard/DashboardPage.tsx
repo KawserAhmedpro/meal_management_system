@@ -1,10 +1,14 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db';
 import { useApp } from '../../context/AppContext';
-import { calculateMonthSummary } from '../../utils/calculations';
+import {
+  calculateMonthSummary,
+  calculateAllManagerAssignmentPeriods,
+} from '../../utils/calculations';
 import { formatMonthName } from '../../utils/formatters';
 import { StatCards } from './StatCards';
+import { ManagerAssignmentSummaryCard } from '../../components/managers/ManagerAssignmentSummaryCard';
 import { QuickActions } from './QuickActions';
 import { DashboardCharts } from './DashboardCharts';
 import { RecentExpenses } from './RecentExpenses';
@@ -53,6 +57,21 @@ export const DashboardPage: React.FC = () => {
 
   const activeManagers = managers.filter((m) => m.status === 'Active');
   const activeManagerDisplay = activeManagers.map((m) => m.name).join(', ') || settings.managerName || 'Manager';
+
+  // All entries across all months for Manager Assignment-Period Accounting
+  const allMealEntries = useLiveQuery(() => db.mealEntries.toArray(), []) || [];
+  const allExpenses = useLiveQuery(() => db.expenses.toArray(), []) || [];
+  const allClosures = useLiveQuery(() => db.dailyClosures.toArray(), []) || [];
+
+  const managerAssignmentSummaries = useMemo(() => {
+    return calculateAllManagerAssignmentPeriods(
+      managers,
+      allMealEntries,
+      allExpenses,
+      allClosures,
+      settings.managerFeePerMeal || 5
+    );
+  }, [managers, allMealEntries, allExpenses, allClosures, settings.managerFeePerMeal]);
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
@@ -142,6 +161,14 @@ export const DashboardPage: React.FC = () => {
           </a>
         </div>
       </div>
+
+      {/* Manager Assignment Period Accounting Summary */}
+      {managerAssignmentSummaries.length > 0 && (
+        <ManagerAssignmentSummaryCard
+          summaries={managerAssignmentSummaries}
+          currencySymbol={settings.currencySymbol}
+        />
+      )}
 
       {/* 8 Core Financial & Mess Summary Cards */}
       <StatCards overview={overview} currencySymbol={settings.currencySymbol} />

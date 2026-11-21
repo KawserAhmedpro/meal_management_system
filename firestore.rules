@@ -38,7 +38,8 @@ service cloud.firestore {
         'currencySymbol',
         'activeMonth',
         'availableMonths',
-        'lastPublishedAt'
+        'lastPublishedAt',
+        'currentManager'
       ]);
     }
 
@@ -51,7 +52,8 @@ service cloud.firestore {
         'expenses',
         'members',
         'memberDailyMeals',
-        'publishedAt'
+        'publishedAt',
+        'managerAssignment'
       ]);
     }
 

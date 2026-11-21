@@ -120,10 +120,30 @@ export const ManagerModal: React.FC<ManagerModalProps> = ({
   }, [watchStartDate, watchEndDate, existingManagers, managerToEdit]);
 
   const onSubmit = async (data: FormValues) => {
+    const cleanEndDate = data.endDate.trim() ? data.endDate.trim() : null;
+    const start = data.startDate;
+    const end = cleanEndDate || '9999-12-31';
+
+    // Prevent overlapping manager assignments (Requirement 6)
+    const conflicts = existingManagers.filter((m) => {
+      if (managerToEdit && m.id === managerToEdit.id) return false;
+      const mStart = m.startDate;
+      const mEnd = m.endDate || '9999-12-31';
+      return start <= mEnd && end >= mStart;
+    });
+
+    if (conflicts.length > 0) {
+      alert(
+        `Cannot save manager assignment: Overlapping tenure detected with ${conflicts
+          .map((c) => `${c.name} (${c.startDate} to ${c.endDate || 'Present'})`)
+          .join(', ')}. Please adjust dates or set a resignation date for the existing manager so assignment periods do not overlap.`
+      );
+      return;
+    }
+
     const now = Date.now();
     const rateOverride =
       data.feeRateOverride.trim() !== '' ? Number(data.feeRateOverride) : undefined;
-    const cleanEndDate = data.endDate.trim() ? data.endDate.trim() : null;
 
     if (managerToEdit) {
       await db.managers.update(managerToEdit.id, {

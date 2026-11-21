@@ -10,7 +10,13 @@ import { ConfirmDialog } from '../../components/ui/ConfirmDialog';
 import { ManagerModal } from './ManagerModal';
 import { DailyClosureModal } from './DailyClosureModal';
 import { ManagerPeriod, DailyMealClosure } from '../../types';
-import { calculateMonthSummary, isDateFullOff, isManagerActiveOnDate } from '../../utils/calculations';
+import {
+  calculateMonthSummary,
+  calculateAllManagerAssignmentPeriods,
+  isDateFullOff,
+  isManagerActiveOnDate,
+} from '../../utils/calculations';
+import { ManagerAssignmentSummaryCard } from '../../components/managers/ManagerAssignmentSummaryCard';
 import { formatCurrency } from '../../utils/formatters';
 import {
   Users,
@@ -61,6 +67,21 @@ export const ManagersAndClosuresPage: React.FC = () => {
   const meals = useLiveQuery(() => db.mealEntries.where('month').equals(selectedMonth).toArray(), [selectedMonth]) || [];
   const expenses = useLiveQuery(() => db.expenses.where('month').equals(selectedMonth).toArray(), [selectedMonth]) || [];
   const deposits = useLiveQuery(() => db.deposits.where('month').equals(selectedMonth).toArray(), [selectedMonth]) || [];
+
+  // All entries across all months for Manager Assignment-Period Accounting
+  const allMeals = useLiveQuery(() => db.mealEntries.toArray(), []) || [];
+  const allExpenses = useLiveQuery(() => db.expenses.toArray(), []) || [];
+  const allClosures = useLiveQuery(() => db.dailyClosures.toArray(), []) || [];
+
+  const managerAssignmentSummaries = React.useMemo(() => {
+    return calculateAllManagerAssignmentPeriods(
+      managers,
+      allMeals,
+      allExpenses,
+      allClosures,
+      settings.managerFeePerMeal || 5
+    );
+  }, [managers, allMeals, allExpenses, allClosures, settings.managerFeePerMeal]);
 
   // Month calculation with Option A manager fees and daily closures
   const { overview } = calculateMonthSummary(
@@ -227,6 +248,14 @@ export const ManagersAndClosuresPage: React.FC = () => {
               iconBgColor="bg-amber-50"
             />
           </div>
+
+          {/* Manager Assignment Period Accounting Card */}
+          {managerAssignmentSummaries.length > 0 && (
+            <ManagerAssignmentSummaryCard
+              summaries={managerAssignmentSummaries}
+              currencySymbol={settings.currencySymbol}
+            />
+          )}
 
           {/* Action Row */}
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">

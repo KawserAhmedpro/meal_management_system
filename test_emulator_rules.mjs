@@ -224,7 +224,20 @@ async function runAll() {
       currencySymbol: '৳',
       activeMonth: '2026-03',
       availableMonths: ['2026-03'],
-      lastPublishedAt: 1795200000000
+      lastPublishedAt: 1795200000000,
+      currentManager: {
+        managerName: 'Ratul',
+        startDate: '2026-11-21',
+        endDate: null,
+        status: 'Active',
+        totalDays: 35,
+        totalMeals: 500,
+        marketExpenses: 10000,
+        mealRate: 20,
+        feeRatePerMeal: 5,
+        managerFee: 2500,
+        isCurrentlyActive: true
+      }
     }, ADMIN_UID);
     if (res.status !== 200) throw new Error(`Expected 200, got ${res.status}: ${JSON.stringify(res.data)}`);
   });
@@ -262,7 +275,20 @@ async function runAll() {
       expenses: [],
       members: [],
       memberDailyMeals: {},
-      publishedAt: 1795200000000
+      publishedAt: 1795200000000,
+      managerAssignment: {
+        managerName: 'Ratul',
+        startDate: '2026-11-21',
+        endDate: null,
+        status: 'Active',
+        totalDays: 35,
+        totalMeals: 500,
+        marketExpenses: 10000,
+        mealRate: 20,
+        feeRatePerMeal: 5,
+        managerFee: 2500,
+        isCurrentlyActive: true
+      }
     }, ADMIN_UID);
     if (res.status !== 200) throw new Error(`Expected 200, got ${res.status}: ${JSON.stringify(res.data)}`);
   });

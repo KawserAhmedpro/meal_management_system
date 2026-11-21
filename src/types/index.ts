@@ -93,6 +93,26 @@ export interface SystemSettings {
   reminderDays: number;
 }
 
+export interface ManagerAssignmentPeriodSummary {
+  managerId: string;
+  managerName: string;
+  startDate: string; // YYYY-MM-DD (inclusive)
+  endDate?: string | null; // YYYY-MM-DD (inclusive, null if active)
+  effectiveEndDate: string; // YYYY-MM-DD (endDate or today's date if active)
+  status: 'Active' | 'Resigned';
+  isCurrentlyActive: boolean;
+  totalDaysAssigned: number; // Inclusive calendar days count
+  totalMeals: number; // Effective total meals during assignment period
+  totalMarketExpenses: number; // Market & bazaar expenses during assignment period
+  otherExpensesTotal: number; // General / utility expenses during assignment period
+  totalPeriodExpenses: number; // Total dining expenses during assignment period
+  mealRate: number; // totalMarketExpenses / totalMeals (0 if zero meals)
+  feeRatePerMeal: number; // Configured fee per meal (e.g. 5)
+  totalManagerFee: number; // totalMeals * feeRatePerMeal (separated from mealRate)
+  fullOffDaysCount: number; // Days with FULL_OFF closure during period
+  activeServingDaysCount: number; // Days with effective meals > 0
+}
+
 export interface ManagerFeeCalculation {
   manager: ManagerPeriod;
   activeStartDate: string;

@@ -21,8 +21,13 @@ import {
   PublicDailyMealSummary,
   PublicExpenseItem,
   PublicMemberInfo,
+  PublicManagerAssignmentSummary,
 } from '../types/publicPortal';
-import { calculateMonthSummary } from '../utils/calculations';
+import {
+  calculateMonthSummary,
+  calculateManagerAssignmentPeriodAccounting,
+  isManagerActiveOnDate,
+} from '../utils/calculations';
 
 export const PUBLIC_PORTAL_COLLECTION = 'public_portal';
 
@@ -188,6 +193,41 @@ export function sanitizeAndBuildPublicData(
     totalMeals: memberTotalMealsMap.get(m.id) || 0,
   }));
 
+  // 5b. Build Manager Assignment Period Summary if manager exists
+  let managerAssignment: PublicManagerAssignmentSummary | null = null;
+  const monthStart = `${month}-01`;
+  const monthEnd = `${month}-${String(daysInMonth).padStart(2, '0')}`;
+  const activeMgrForMonth =
+    managers.find((m) => {
+      const effEnd = m.status === 'Active' || !m.endDate ? getTodayLocalDate() : m.endDate;
+      return m.startDate <= monthEnd && effEnd >= monthStart;
+    }) ||
+    managers.find((m) => m.status === 'Active') ||
+    managers[managers.length - 1];
+
+  if (activeMgrForMonth) {
+    const periodCalc = calculateManagerAssignmentPeriodAccounting(
+      activeMgrForMonth,
+      mealEntries,
+      expenses,
+      dailyClosures,
+      settings.managerFeePerMeal || 5
+    );
+    managerAssignment = {
+      managerName: periodCalc.managerName,
+      startDate: periodCalc.startDate,
+      endDate: periodCalc.endDate || null,
+      status: periodCalc.status,
+      totalDays: periodCalc.totalDaysAssigned,
+      totalMeals: periodCalc.totalMeals,
+      marketExpenses: periodCalc.totalMarketExpenses,
+      mealRate: periodCalc.mealRate,
+      feeRatePerMeal: periodCalc.feeRatePerMeal,
+      managerFee: periodCalc.totalManagerFee,
+      isCurrentlyActive: periodCalc.isCurrentlyActive,
+    };
+  }
+
   // 6. Return PublicMonthData
   return {
     month,
@@ -208,6 +248,7 @@ export function sanitizeAndBuildPublicData(
     members: sanitizedMembers,
     memberDailyMeals,
     publishedAt: Date.now(),
+    managerAssignment: managerAssignment || null,
   };
 }
 

@@ -19,6 +19,7 @@ import {
   Building,
   AlertTriangle,
   FileText,
+  UserCheck,
 } from 'lucide-react';
 import {
   subscribeToPublicMonth,
@@ -303,6 +304,98 @@ export const PublicPortalPage: React.FC = () => {
             <span>Viewing: <strong className="text-emerald-300">{formatMonthName(selectedMonth)}</strong></span>
           </div>
         </div>
+
+        {/* Manager Assignment-Period Public Operational Summary (Minimal & Clean) */}
+        {(() => {
+          const currentManager = monthData?.managerAssignment || meta?.currentManager;
+          const currencySymbol = meta?.currencySymbol || '৳';
+          if (!currentManager) return null;
+
+          return (
+            <div className="bg-slate-900/90 border border-slate-800/80 rounded-2xl p-4 sm:p-5 text-white shadow-sm">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-3 border-b border-slate-800/80">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0">
+                    <UserCheck className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-sm font-bold text-white">
+                        {currentManager.managerName}
+                      </span>
+                      {currentManager.isCurrentlyActive ? (
+                        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                          Active Manager
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-800 text-slate-300 border border-slate-700">
+                          Resigned
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      Period: <strong className="text-slate-300">{currentManager.startDate}</strong> →{' '}
+                      <strong className="text-slate-300">
+                        {currentManager.isCurrentlyActive ? 'Today' : (currentManager.endDate || 'Completed')}
+                      </strong>{' '}
+                      ({currentManager.totalDays} days)
+                    </p>
+                  </div>
+                </div>
+
+                <div className="text-[11px] text-slate-400 self-start sm:self-auto bg-slate-950/60 px-2.5 py-1 rounded-lg border border-slate-800">
+                  {currentManager.isCurrentlyActive ? 'Running Period (Live)' : 'Final Tenure Summary'}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3 pt-3">
+                {/* 1. Meals */}
+                <div className="bg-slate-950/50 rounded-xl p-3 border border-slate-800/80">
+                  <span className="text-[11px] text-slate-400 font-medium block">
+                    {currentManager.isCurrentlyActive ? 'Meals (To Today)' : 'Period Meals'}
+                  </span>
+                  <span className="text-lg sm:text-xl font-bold text-white block mt-0.5">
+                    {formatNumber(currentManager.totalMeals)}
+                  </span>
+                  <span className="text-[10px] text-slate-500 block">Total counted meals</span>
+                </div>
+
+                {/* 2. Market Expenses */}
+                <div className="bg-slate-950/50 rounded-xl p-3 border border-slate-800/80">
+                  <span className="text-[11px] text-slate-400 font-medium block">Market Expenses</span>
+                  <span className="text-lg sm:text-xl font-bold text-white block mt-0.5">
+                    {currencySymbol}{formatNumber(currentManager.marketExpenses)}
+                  </span>
+                  <span className="text-[10px] text-slate-500 block">Bazaar purchases</span>
+                </div>
+
+                {/* 3. Meal Rate */}
+                <div className="bg-emerald-950/20 rounded-xl p-3 border border-emerald-500/20">
+                  <span className="text-[11px] text-emerald-400 font-medium block">
+                    {currentManager.isCurrentlyActive ? 'Running Meal Rate' : 'Final Meal Rate'}
+                  </span>
+                  <span className="text-lg sm:text-xl font-bold text-emerald-300 block mt-0.5">
+                    {currencySymbol}{currentManager.mealRate.toFixed(2)}
+                    <span className="text-xs text-emerald-500/80 font-normal"> / meal</span>
+                  </span>
+                  <span className="text-[10px] text-emerald-400/80 block">Market ÷ Meals</span>
+                </div>
+
+                {/* 4. Manager Fee */}
+                <div className="bg-amber-950/15 rounded-xl p-3 border border-amber-500/20">
+                  <span className="text-[11px] text-amber-400 font-medium block">Manager Fee</span>
+                  <span className="text-lg sm:text-xl font-bold text-amber-300 block mt-0.5">
+                    {currencySymbol}{formatNumber(currentManager.managerFee)}
+                  </span>
+                  <span className="text-[10px] text-amber-400/80 block">
+                    @{currencySymbol}{currentManager.feeRatePerMeal}/meal • Separate
+                  </span>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
 
         {/* =====================================================================
             TOP METRIC STAT CARDS

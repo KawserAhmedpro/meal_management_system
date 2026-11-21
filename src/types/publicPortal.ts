@@ -1,5 +1,19 @@
 import { MealStatus } from './index';
 
+export interface PublicManagerAssignmentSummary {
+  managerName: string;
+  startDate: string; // YYYY-MM-DD
+  endDate?: string | null; // YYYY-MM-DD (null if active)
+  status: 'Active' | 'Resigned';
+  totalDays: number;
+  totalMeals: number; // Meals counted from assignment start through today or resignation
+  marketExpenses: number; // Market/bazaar expenses during assignment period
+  mealRate: number; // marketExpenses / totalMeals (excludes manager fee)
+  feeRatePerMeal: number; // Configured fee per meal (e.g. 5)
+  managerFee: number; // Total running manager fee (displayed separately)
+  isCurrentlyActive: boolean;
+}
+
 export interface PublicPortalMeta {
   messName: string;
   institutionName: string;
@@ -8,6 +22,7 @@ export interface PublicPortalMeta {
   activeMonth: string; // e.g. "2026-03"
   availableMonths: string[]; // e.g. ["2026-03", "2026-02"]
   lastPublishedAt: number; // unix timestamp
+  currentManager?: PublicManagerAssignmentSummary | null;
 }
 
 export interface PublicMemberInfo {
@@ -61,4 +76,5 @@ export interface PublicMonthData {
   // Mapping of `${memberId}_${day}` -> { count: number, type: MealStatus }
   memberDailyMeals: Record<string, { count: number; type: MealStatus }>;
   publishedAt: number;
+  managerAssignment?: PublicManagerAssignmentSummary | null;
 }
