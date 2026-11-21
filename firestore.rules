@@ -60,7 +60,7 @@ service cloud.firestore {
           ]) &&
           data.currentManager.managerName is string &&
           data.currentManager.assignmentDate is string &&
-          data.currentManager.status in ['active', 'resigned'] &&
+          data.currentManager.status in ['active', 'resigned', 'Active', 'Resigned'] &&
           data.currentManager.totalMeals is number &&
           data.currentManager.totalMarketExpenses is number &&
           data.currentManager.mealRate is number &&

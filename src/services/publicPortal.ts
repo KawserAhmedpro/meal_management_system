@@ -287,7 +287,8 @@ export async function publishMonthToPublicPortal(monthData: PublicMonthData): Pr
 
   const monthDocRef = doc(firestore, PUBLIC_PORTAL_COLLECTION, monthData.month);
   const cleanData = removeUndefined(monthData);
-  await setDoc(monthDocRef, cleanData, { merge: true });
+  // Direct overwrite replaces deprecated fields cleanly without stale merge pollution
+  await setDoc(monthDocRef, cleanData);
 }
 
 /**
@@ -300,7 +301,8 @@ export async function publishPublicPortalMeta(meta: PublicPortalMeta): Promise<v
 
   const metaDocRef = doc(firestore, PUBLIC_PORTAL_COLLECTION, 'meta');
   const cleanMeta = removeUndefined(meta);
-  await setDoc(metaDocRef, cleanMeta, { merge: true });
+  // Direct overwrite replaces deprecated fields cleanly without stale merge pollution
+  await setDoc(metaDocRef, cleanMeta);
 }
 
 /**
