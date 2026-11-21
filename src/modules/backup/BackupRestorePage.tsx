@@ -100,8 +100,14 @@ export const BackupRestorePage: React.FC = () => {
     reader.onload = (event) => {
       try {
         const parsed = JSON.parse(event.target?.result as string);
+        if (!parsed || typeof parsed !== 'object') {
+          throw new Error('Backup payload is empty or not a valid JSON object.');
+        }
         if (!parsed.data || !parsed.schemaVersion) {
           throw new Error('Invalid JSON backup format. Missing schema version or data.');
+        }
+        if (typeof parsed.data !== 'object' || parsed.data === null) {
+          throw new Error('Backup data payload must be an object containing table records.');
         }
         setJsonPreview(parsed);
       } catch (err: any) {
@@ -123,7 +129,33 @@ export const BackupRestorePage: React.FC = () => {
         categories: resCategories = [],
       } = jsonPreview.data;
 
+      // Deep schema validation: Ensure all supplied collections are genuine arrays
+      if (
+        !Array.isArray(resMembers) ||
+        !Array.isArray(resMealEntries) ||
+        !Array.isArray(resExpenses) ||
+        !Array.isArray(resDeposits) ||
+        !Array.isArray(resCategories)
+      ) {
+        throw new Error('Invalid backup structure: Collections (members, meals, expenses, deposits) must be arrays.');
+      }
+
       if (restoreMode === 'replace') {
+        // Pre-wipe safety mechanism: Snapshot current IndexedDB to localStorage to prevent catastrophic data loss
+        try {
+          const safetySnapshot = {
+            timestamp: new Date().toISOString(),
+            members: await db.members.toArray(),
+            mealEntries: await db.mealEntries.toArray(),
+            expenses: await db.expenses.toArray(),
+            deposits: await db.deposits.toArray(),
+            categories: await db.categories.toArray(),
+          };
+          localStorage.setItem('dms_pre_restore_safety_backup', JSON.stringify(safetySnapshot));
+        } catch (snapshotErr) {
+          console.warn('[Backup] Unable to save local safety snapshot before replace:', snapshotErr);
+        }
+
         await db.transaction(
           'rw',
           [db.members, db.mealEntries, db.expenses, db.deposits, db.categories],

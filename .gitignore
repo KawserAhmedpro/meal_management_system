@@ -26,3 +26,12 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Sensitive data, spreadsheets, and backup files
+*.xlsx
+*.xls
+*.csv
+extracted_members.json
+*backup*.json
+*dump*.json
+*.bak

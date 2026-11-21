@@ -18,10 +18,10 @@ export interface AuthState {
  */
 export function verifyIsAdmin(user: User | null): boolean {
   if (!user) return false;
-  // If no ADMIN_UID configured in environment, allow authenticated user (with warning)
+  // Strict fail-closed verification: never allow any user if ADMIN_UID is not configured
   if (!ADMIN_UID || ADMIN_UID.trim().length === 0 || ADMIN_UID.includes('your-admin-uid')) {
-    console.warn('[Auth] VITE_FIREBASE_ADMIN_UID is not set. Allowing authenticated user.');
-    return true;
+    console.error('[Auth] VITE_FIREBASE_ADMIN_UID is not properly configured. Admin access denied.');
+    return false;
   }
   return user.uid === ADMIN_UID;
 }

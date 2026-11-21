@@ -24,11 +24,26 @@ service cloud.firestore {
     }
 
     // 1. PUBLIC PORTAL COLLECTION:
-    // Read: Allowed for anyone (members, public visitors - no authentication required)
-    // Write: Strictly restricted to authorized Admin UID
-    match /public_portal/{document=**} {
+    // Read: Whitelisted to meta document and validated YYYY-MM month documents only.
+    // Write: Strictly restricted to authorized Admin UID with field-level sanitization enforcement.
+    match /public_portal/meta {
       allow read: if true;
       allow write: if isAuthorizedAdmin();
+    }
+
+    match /public_portal/{monthId} {
+      // Whitelist only valid YYYY-MM document keys (e.g., 2026-03)
+      allow read: if monthId.matches('^[0-9]{4}-[0-9]{2}$');
+
+      // Admin write with field-level sanitization enforcement:
+      // Absolutely forbids private financial keys from being stored in public_portal
+      allow write: if isAuthorizedAdmin()
+        && monthId.matches('^[0-9]{4}-[0-9]{2}$')
+        && !request.resource.data.keys().hasAny([
+          'deposits', 'totalDeposits', 'due', 'totalDue',
+          'advance', 'totalAdvance', 'phone', 'personalNotes',
+          'paymentHistory'
+        ]);
     }
 
     // 2. STRICTLY PRIVATE COLLECTIONS:
