@@ -52,14 +52,28 @@ async function getDoc(path, uid = null, extraClaims = {}) {
   return { status: res.status, data: await res.json() };
 }
 
+function toFirestoreValue(val) {
+  if (val === null || val === undefined) return { nullValue: null };
+  if (typeof val === 'string') return { stringValue: val };
+  if (typeof val === 'number') return { doubleValue: val };
+  if (typeof val === 'boolean') return { booleanValue: val };
+  if (Array.isArray(val)) {
+    return { arrayValue: { values: val.map(toFirestoreValue) } };
+  }
+  if (typeof val === 'object') {
+    const fields = {};
+    for (const [k, v] of Object.entries(val)) {
+      fields[k] = toFirestoreValue(v);
+    }
+    return { mapValue: { fields } };
+  }
+  return { stringValue: String(val) };
+}
+
 async function patchDoc(path, fields, uid = null, extraClaims = {}) {
   const restFields = {};
   for (const [key, val] of Object.entries(fields)) {
-    if (typeof val === 'string') restFields[key] = { stringValue: val };
-    else if (typeof val === 'number') restFields[key] = { doubleValue: val };
-    else if (typeof val === 'boolean') restFields[key] = { booleanValue: val };
-    else if (Array.isArray(val)) restFields[key] = { arrayValue: { values: [] } };
-    else if (typeof val === 'object' && val !== null) restFields[key] = { mapValue: { fields: {} } };
+    restFields[key] = toFirestoreValue(val);
   }
 
   const res = await fetch(`${BASE_URL}/${path}`, {
@@ -215,8 +229,8 @@ async function runAll() {
   // -------------------------------------------------------------------------
   console.log('\nGroup 6: Strict Public Field Allowlist Enforcement');
 
-  // A. /public_portal/meta allowlist
-  await runTestCase('Admin CAN WRITE valid allowlist fields to /public_portal/meta', async () => {
+  // A. /public_portal/meta allowlist & nested currentManager validation
+  await runTestCase('Admin CAN WRITE valid allowlist fields to /public_portal/meta with active currentManager', async () => {
     const res = await patchDoc('public_portal/meta', {
       messName: 'Omar Ekushe Hall Mess',
       institutionName: 'University',
@@ -227,22 +241,59 @@ async function runAll() {
       lastPublishedAt: 1795200000000,
       currentManager: {
         managerName: 'Ratul',
-        startDate: '2026-11-21',
-        endDate: null,
-        status: 'Active',
-        totalDays: 35,
+        assignmentDate: '2026-11-21',
+        status: 'active',
         totalMeals: 500,
-        marketExpenses: 10000,
+        totalMarketExpenses: 10000,
         mealRate: 20,
-        feeRatePerMeal: 5,
-        managerFee: 2500,
-        isCurrentlyActive: true
+        managerFeePerMeal: 5,
+        totalManagerFee: 2500
       }
     }, ADMIN_UID);
     if (res.status !== 200) throw new Error(`Expected 200, got ${res.status}: ${JSON.stringify(res.data)}`);
   });
 
-  await runTestCase('Admin CANNOT WRITE unexpected field "deposits" to /public_portal/meta', async () => {
+  await runTestCase('Admin CAN WRITE valid allowlist fields to /public_portal/meta with resigned currentManager', async () => {
+    const res = await patchDoc('public_portal/meta', {
+      messName: 'Omar Ekushe Hall Mess',
+      currencySymbol: '৳',
+      activeMonth: '2026-03',
+      availableMonths: ['2026-03'],
+      lastPublishedAt: 1795200000000,
+      currentManager: {
+        managerName: 'Sultan',
+        assignmentDate: '2026-10-01',
+        status: 'resigned',
+        resignationDate: '2026-11-20',
+        totalMeals: 800,
+        totalMarketExpenses: 16000,
+        mealRate: 20,
+        managerFeePerMeal: 5,
+        totalManagerFee: 4000
+      }
+    }, ADMIN_UID);
+    if (res.status !== 200) throw new Error(`Expected 200, got ${res.status}: ${JSON.stringify(res.data)}`);
+  });
+
+  await runTestCase('Admin CANNOT WRITE unexpected field inside currentManager (e.g. deposits)', async () => {
+    const res = await patchDoc('public_portal/meta', {
+      messName: 'Mess',
+      currentManager: {
+        managerName: 'Ratul',
+        assignmentDate: '2026-11-21',
+        status: 'active',
+        totalMeals: 500,
+        totalMarketExpenses: 10000,
+        mealRate: 20,
+        managerFeePerMeal: 5,
+        totalManagerFee: 2500,
+        deposits: 50000 // Sensitive private leak attempt!
+      }
+    }, ADMIN_UID);
+    if (res.status !== 403) throw new Error(`Expected 403 Forbidden on nested unallowed field 'deposits', got ${res.status}`);
+  });
+
+  await runTestCase('Admin CANNOT WRITE unexpected field "deposits" to top-level /public_portal/meta', async () => {
     const res = await patchDoc('public_portal/meta', {
       messName: 'Mess',
       deposits: 10000
@@ -266,8 +317,21 @@ async function runAll() {
     if (res.status !== 403) throw new Error(`Expected 403 Forbidden on unallowed field 'randomKey', got ${res.status}`);
   });
 
-  // B. /public_portal/{monthId} allowlist
-  await runTestCase('Admin CAN WRITE valid allowlist fields to /public_portal/2026-03', async () => {
+  // B. /public_portal/{monthId} allowlist (Operational monthly data only)
+  await runTestCase('Admin CAN WRITE valid monthly allowlist fields to /public_portal/2026-03', async () => {
+    const res = await patchDoc('public_portal/2026-03', {
+      month: '2026-03',
+      summary: {},
+      dailyMealSummaries: [],
+      expenses: [],
+      members: [],
+      memberDailyMeals: {},
+      publishedAt: 1795200000000
+    }, ADMIN_UID);
+    if (res.status !== 200) throw new Error(`Expected 200, got ${res.status}: ${JSON.stringify(res.data)}`);
+  });
+
+  await runTestCase('Admin CANNOT WRITE managerAssignment to /public_portal/2026-03 (Duplication prevented)', async () => {
     const res = await patchDoc('public_portal/2026-03', {
       month: '2026-03',
       summary: {},
@@ -276,21 +340,9 @@ async function runAll() {
       members: [],
       memberDailyMeals: {},
       publishedAt: 1795200000000,
-      managerAssignment: {
-        managerName: 'Ratul',
-        startDate: '2026-11-21',
-        endDate: null,
-        status: 'Active',
-        totalDays: 35,
-        totalMeals: 500,
-        marketExpenses: 10000,
-        mealRate: 20,
-        feeRatePerMeal: 5,
-        managerFee: 2500,
-        isCurrentlyActive: true
-      }
+      managerAssignment: { managerName: 'Ratul' } // Must be rejected!
     }, ADMIN_UID);
-    if (res.status !== 200) throw new Error(`Expected 200, got ${res.status}: ${JSON.stringify(res.data)}`);
+    if (res.status !== 403) throw new Error(`Expected 403 Forbidden on duplicated managerAssignment, got ${res.status}`);
   });
 
   await runTestCase('Admin CANNOT WRITE unexpected field "phone" to /public_portal/2026-03', async () => {

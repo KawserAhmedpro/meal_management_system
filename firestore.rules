@@ -29,9 +29,10 @@ service cloud.firestore {
       return monthId.matches('^[0-9]{4}-(0[1-9]|1[0-2])$');
     }
 
-    // Strict field allowlist for public_portal/meta
+    // Strict field allowlist & nested type validation for public_portal/meta
     function isValidMetaDoc() {
-      return request.resource.data.keys().hasOnly([
+      let data = request.resource.data;
+      let hasAllowedKeys = data.keys().hasOnly([
         'messName',
         'institutionName',
         'hallName',
@@ -41,9 +42,42 @@ service cloud.firestore {
         'lastPublishedAt',
         'currentManager'
       ]);
+
+      let validCurrentManager = !('currentManager' in data) ||
+        data.currentManager == null ||
+        (
+          data.currentManager is map &&
+          data.currentManager.keys().hasOnly([
+            'managerName',
+            'assignmentDate',
+            'status',
+            'resignationDate',
+            'totalMeals',
+            'totalMarketExpenses',
+            'mealRate',
+            'managerFeePerMeal',
+            'totalManagerFee'
+          ]) &&
+          data.currentManager.managerName is string &&
+          data.currentManager.assignmentDate is string &&
+          data.currentManager.status in ['active', 'resigned'] &&
+          data.currentManager.totalMeals is number &&
+          data.currentManager.totalMarketExpenses is number &&
+          data.currentManager.mealRate is number &&
+          data.currentManager.managerFeePerMeal is number &&
+          data.currentManager.totalManagerFee is number &&
+          (
+            !('resignationDate' in data.currentManager) ||
+            data.currentManager.resignationDate == null ||
+            data.currentManager.resignationDate is string
+          )
+        );
+
+      return hasAllowedKeys && validCurrentManager;
     }
 
     // Strict field allowlist for public_portal/{monthId}
+    // Operational monthly data only. No duplicated manager assignment summary.
     function isValidMonthDoc() {
       return request.resource.data.keys().hasOnly([
         'month',
@@ -52,8 +86,7 @@ service cloud.firestore {
         'expenses',
         'members',
         'memberDailyMeals',
-        'publishedAt',
-        'managerAssignment'
+        'publishedAt'
       ]);
     }
 

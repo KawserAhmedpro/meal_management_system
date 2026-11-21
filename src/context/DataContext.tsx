@@ -34,8 +34,8 @@ import {
   publishMonthToPublicPortal,
   publishPublicPortalMeta,
   getPublicPortalUrl,
+  buildPublicCurrentManagerSummary,
 } from '../services/publicPortal';
-import { calculateManagerAssignmentPeriodAccounting } from '../utils/calculations';
 
 export interface DataContextType {
   // Realtime Collections
@@ -532,36 +532,16 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       for (const e of expenses) if (e.month) allMonthsSet.add(e.month);
       const availableMonths = Array.from(allMonthsSet).sort().reverse();
 
-      // 4. Compute active manager assignment summary
-      const activeManager =
-        dexieManagers.find((m) => m.status === 'Active') ||
-        dexieManagers[dexieManagers.length - 1];
+      // 4. Compute single authoritative public Manager Assignment Period Summary
+      const currentManagerSummary = buildPublicCurrentManagerSummary(
+        dexieManagers,
+        dexieMealEntries,
+        dexieExpenses,
+        dexieClosures,
+        settings.managerFeePerMeal || 5
+      );
 
-      let currentManagerSummary = null;
-      if (activeManager) {
-        const mgrCalc = calculateManagerAssignmentPeriodAccounting(
-          activeManager,
-          dexieMealEntries,
-          dexieExpenses,
-          dexieClosures,
-          settings.managerFeePerMeal || 5
-        );
-        currentManagerSummary = {
-          managerName: mgrCalc.managerName,
-          startDate: mgrCalc.startDate,
-          endDate: mgrCalc.endDate || null,
-          status: mgrCalc.status,
-          totalDays: mgrCalc.totalDaysAssigned,
-          totalMeals: mgrCalc.totalMeals,
-          marketExpenses: mgrCalc.totalMarketExpenses,
-          mealRate: mgrCalc.mealRate,
-          feeRatePerMeal: mgrCalc.feeRatePerMeal,
-          managerFee: mgrCalc.totalManagerFee,
-          isCurrentlyActive: mgrCalc.isCurrentlyActive,
-        };
-      }
-
-      // 5. Publish public_portal/meta
+      // 5. Publish public_portal/meta (Single source of truth for manager summary)
       await publishPublicPortalMeta({
         messName: settings.messName || 'DINING MANAGEMENT SYSTEM',
         institutionName: settings.institutionName || '',
@@ -633,7 +613,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  // Debounced auto-publish to Public Portal when dining data changes
+  // Debounced auto-publish to Public Portal when dining data or managers change
   useEffect(() => {
     if (!isCloudActive) return;
     if (members.length === 0 && mealEntries.length === 0 && expenses.length === 0) return;
@@ -650,6 +630,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     mealEntries.length,
     expenses.length,
     dailyClosures.length,
+    managers,
     settings.managerFeePerMeal,
     settings.messName,
   ]);

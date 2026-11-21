@@ -5,6 +5,10 @@ import {
   isMarketExpense,
   getTodayLocalDate
 } from './src/utils/calculations.ts';
+import {
+  buildPublicCurrentManagerSummary,
+  sanitizeAndBuildPublicData
+} from './src/services/publicPortal.ts';
 
 console.log('========================================================================');
 console.log('MANAGER ASSIGNMENT PERIOD ACCOUNTING TEST SUITE (13 SCENARIOS)');
@@ -399,13 +403,13 @@ console.log('\nTest 12: Deduplication of identical expense IDs');
 }
 
 // -----------------------------------------------------------------------------
-// Test 13: Public Portal privacy and data sanitization
+// Test 13: Minimal Public Portal Architecture & Strict Single-Location Summary
 // -----------------------------------------------------------------------------
-console.log('\nTest 13: Public Portal Manager Summary privacy enforcement');
+console.log('\nTest 13: Minimal Public Portal Architecture & Strict Single-Location Summary');
 {
-  const manager = {
-    id: 'MGR-PUB',
-    name: 'Public Ratul',
+  const activeMgr = {
+    id: 'MGR-ACTIVE',
+    name: 'Active Ratul',
     startDate: '2026-11-21',
     endDate: null,
     status: 'Active',
@@ -413,40 +417,66 @@ console.log('\nTest 13: Public Portal Manager Summary privacy enforcement');
     updatedAt: Date.now(),
   };
 
+  const resignedMgr = {
+    id: 'MGR-RESIGNED',
+    name: 'Resigned Sultan',
+    startDate: '2026-10-01',
+    endDate: '2026-11-20',
+    status: 'Resigned',
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+  };
+
   const meals = [
     { id: 'm1', memberId: 'mem1', date: '2026-11-21', month: '2026-11', count: 500, type: 'Double', updatedAt: Date.now() },
+    { id: 'm2', memberId: 'mem1', date: '2026-10-15', month: '2026-10', count: 800, type: 'Double', updatedAt: Date.now() },
   ];
 
   const expenses = [
     { id: 'e1', date: '2026-11-21', month: '2026-11', title: 'Bazaar', amount: 10000, category: 'Market', createdAt: Date.now() },
+    { id: 'e2', date: '2026-10-15', month: '2026-10', title: 'Bazaar', amount: 16000, category: 'Market', createdAt: Date.now() },
   ];
 
-  const periodSummary = calculateManagerAssignmentPeriodAccounting(manager, meals, expenses, [], 5, '2026-11-21');
+  // 1. Active Manager Summary for /public_portal/meta
+  const activeSummary = buildPublicCurrentManagerSummary([activeMgr], meals, expenses, [], 5, '2026-11-21');
+  assert(activeSummary !== null, 'Active summary generated');
+  assert(activeSummary.managerName === 'Active Ratul', 'Active managerName matches');
+  assert(activeSummary.assignmentDate === '2026-11-21', 'Active assignmentDate matches');
+  assert(activeSummary.status === 'active', 'Active status is "active"');
+  assert(activeSummary.resignationDate === undefined, 'Active manager has NO resignationDate');
+  assert(activeSummary.totalMeals === 500, 'Active totalMeals = 500');
+  assert(activeSummary.totalMarketExpenses === 10000, 'Active totalMarketExpenses = 10,000 BDT');
+  assert(activeSummary.mealRate === 20, 'Active mealRate = 20 BDT');
+  assert(activeSummary.managerFeePerMeal === 5, 'Active managerFeePerMeal = 5');
+  assert(activeSummary.totalManagerFee === 2500, 'Active totalManagerFee = 2,500 BDT');
+  assert(!('deposits' in activeSummary), 'No deposits key in active summary');
+  assert(!('phone' in activeSummary), 'No phone key in active summary');
 
-  // Verify fields prepared for Public Portal
-  const publicSummary = {
-    managerName: periodSummary.managerName,
-    startDate: periodSummary.startDate,
-    endDate: periodSummary.endDate,
-    status: periodSummary.status,
-    totalDays: periodSummary.totalDaysAssigned,
-    totalMeals: periodSummary.totalMeals,
-    marketExpenses: periodSummary.totalMarketExpenses,
-    mealRate: periodSummary.mealRate,
-    feeRatePerMeal: periodSummary.feeRatePerMeal,
-    managerFee: periodSummary.totalManagerFee,
-    isCurrentlyActive: periodSummary.isCurrentlyActive,
-  };
+  // 2. Resigned Manager Summary for /public_portal/meta
+  const resignedSummary = buildPublicCurrentManagerSummary([resignedMgr], meals, expenses, [], 5);
+  assert(resignedSummary !== null, 'Resigned summary generated');
+  assert(resignedSummary.managerName === 'Resigned Sultan', 'Resigned managerName matches');
+  assert(resignedSummary.assignmentDate === '2026-10-01', 'Resigned assignmentDate matches');
+  assert(resignedSummary.status === 'resigned', 'Resigned status is "resigned"');
+  assert(resignedSummary.resignationDate === '2026-11-20', 'Resigned resignationDate is "2026-11-20"');
+  assert(resignedSummary.totalMeals === 800, 'Resigned totalMeals = 800');
+  assert(resignedSummary.totalMarketExpenses === 16000, 'Resigned totalMarketExpenses = 16,000 BDT');
+  assert(resignedSummary.mealRate === 20, 'Resigned mealRate = 20 BDT');
+  assert(resignedSummary.totalManagerFee === 4000, 'Resigned totalManagerFee = 4,000 BDT');
 
-  assert(publicSummary.totalMeals === 500, 'Public totalMeals = 500');
-  assert(publicSummary.marketExpenses === 10000, 'Public marketExpenses = 10,000 BDT');
-  assert(publicSummary.mealRate === 20, 'Public mealRate = 20 BDT');
-  assert(publicSummary.managerFee === 2500, 'Public managerFee = 2,500 BDT (separate)');
-  assert(!('deposits' in publicSummary), 'No deposits key in public manager summary');
-  assert(!('due' in publicSummary), 'No due key in public manager summary');
-  assert(!('advance' in publicSummary), 'No advance key in public manager summary');
-  assert(!('phone' in publicSummary), 'No phone key in public manager summary');
-  assert(!('notes' in publicSummary), 'No notes key in public manager summary');
+  // 3. Verify Monthly Data does NOT contain managerAssignment
+  const monthData = sanitizeAndBuildPublicData(
+    '2026-11',
+    [{ id: 'mem1', name: 'Member 1', room: '101', floor: '1st', status: 'Active' }],
+    meals,
+    expenses,
+    [],
+    { managerFeePerMeal: 5 }
+  );
+
+  assert(!('managerAssignment' in monthData), 'Monthly data strictly DOES NOT contain managerAssignment (Non-duplicated)');
+  assert(monthData.summary.totalMeals === 500, 'Monthly summary meals = 500');
+  assert(monthData.summary.totalExpenses === 10000, 'Monthly summary expenses = 10,000');
 }
 
 console.log('\n========================================================================');

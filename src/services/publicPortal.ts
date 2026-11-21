@@ -21,7 +21,7 @@ import {
   PublicDailyMealSummary,
   PublicExpenseItem,
   PublicMemberInfo,
-  PublicManagerAssignmentSummary,
+  PublicCurrentManagerSummary,
 } from '../types/publicPortal';
 import {
   calculateMonthSummary,
@@ -193,42 +193,7 @@ export function sanitizeAndBuildPublicData(
     totalMeals: memberTotalMealsMap.get(m.id) || 0,
   }));
 
-  // 5b. Build Manager Assignment Period Summary if manager exists
-  let managerAssignment: PublicManagerAssignmentSummary | null = null;
-  const monthStart = `${month}-01`;
-  const monthEnd = `${month}-${String(daysInMonth).padStart(2, '0')}`;
-  const activeMgrForMonth =
-    managers.find((m) => {
-      const effEnd = m.status === 'Active' || !m.endDate ? getTodayLocalDate() : m.endDate;
-      return m.startDate <= monthEnd && effEnd >= monthStart;
-    }) ||
-    managers.find((m) => m.status === 'Active') ||
-    managers[managers.length - 1];
-
-  if (activeMgrForMonth) {
-    const periodCalc = calculateManagerAssignmentPeriodAccounting(
-      activeMgrForMonth,
-      mealEntries,
-      expenses,
-      dailyClosures,
-      settings.managerFeePerMeal || 5
-    );
-    managerAssignment = {
-      managerName: periodCalc.managerName,
-      startDate: periodCalc.startDate,
-      endDate: periodCalc.endDate || null,
-      status: periodCalc.status,
-      totalDays: periodCalc.totalDaysAssigned,
-      totalMeals: periodCalc.totalMeals,
-      marketExpenses: periodCalc.totalMarketExpenses,
-      mealRate: periodCalc.mealRate,
-      feeRatePerMeal: periodCalc.feeRatePerMeal,
-      managerFee: periodCalc.totalManagerFee,
-      isCurrentlyActive: periodCalc.isCurrentlyActive,
-    };
-  }
-
-  // 6. Return PublicMonthData
+  // 6. Return PublicMonthData (Operational monthly data only, NO manager assignment duplication)
   return {
     month,
     summary: {
@@ -248,8 +213,67 @@ export function sanitizeAndBuildPublicData(
     members: sanitizedMembers,
     memberDailyMeals,
     publishedAt: Date.now(),
-    managerAssignment: managerAssignment || null,
   };
+}
+
+/**
+ * Builds the single authoritative public Manager Assignment Period Summary for /public_portal/meta.
+ * Strictly limited to operational metrics:
+ * - managerName
+ * - assignmentDate
+ * - status ('active' | 'resigned')
+ * - resignationDate (only when applicable / resigned)
+ * - totalMeals
+ * - totalMarketExpenses
+ * - mealRate
+ * - managerFeePerMeal
+ * - totalManagerFee
+ */
+export function buildPublicCurrentManagerSummary(
+  managers: ManagerPeriod[],
+  mealEntries: MealEntry[],
+  expenses: Expense[],
+  dailyClosures: DailyMealClosure[] = [],
+  feeRatePerMeal: number = 5,
+  referenceDate?: string
+): PublicCurrentManagerSummary | null {
+  if (!managers || managers.length === 0) return null;
+
+  // Active manager takes priority; fallback to latest resigned manager
+  const manager =
+    managers.find((m) => m.status === 'Active') ||
+    managers[managers.length - 1];
+
+  if (!manager) return null;
+
+  const calc = calculateManagerAssignmentPeriodAccounting(
+    manager,
+    mealEntries,
+    expenses,
+    dailyClosures,
+    feeRatePerMeal,
+    referenceDate
+  );
+
+  const isResigned = manager.status === 'Resigned' || (Boolean(manager.endDate) && manager.status !== 'Active');
+  const status: 'active' | 'resigned' = isResigned ? 'resigned' : 'active';
+
+  const summary: PublicCurrentManagerSummary = {
+    managerName: calc.managerName,
+    assignmentDate: calc.startDate,
+    status,
+    totalMeals: calc.totalMeals,
+    totalMarketExpenses: calc.totalMarketExpenses,
+    mealRate: calc.mealRate,
+    managerFeePerMeal: calc.feeRatePerMeal,
+    totalManagerFee: calc.totalManagerFee,
+  };
+
+  if (isResigned && manager.endDate) {
+    summary.resignationDate = manager.endDate;
+  }
+
+  return summary;
 }
 
 /**

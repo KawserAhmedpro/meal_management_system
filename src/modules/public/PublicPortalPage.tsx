@@ -305,11 +305,13 @@ export const PublicPortalPage: React.FC = () => {
           </div>
         </div>
 
-        {/* Manager Assignment-Period Public Operational Summary (Minimal & Clean) */}
+        {/* Manager Assignment-Period Public Operational Summary (Single Authoritative Source from meta) */}
         {(() => {
-          const currentManager = monthData?.managerAssignment || meta?.currentManager;
+          const currentManager = meta?.currentManager;
           const currencySymbol = meta?.currencySymbol || '৳';
           if (!currentManager) return null;
+
+          const isActive = currentManager.status === 'active';
 
           return (
             <div className="bg-slate-900/90 border border-slate-800/80 rounded-2xl p-4 sm:p-5 text-white shadow-sm">
@@ -323,7 +325,7 @@ export const PublicPortalPage: React.FC = () => {
                       <span className="text-sm font-bold text-white">
                         {currentManager.managerName}
                       </span>
-                      {currentManager.isCurrentlyActive ? (
+                      {isActive ? (
                         <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
                           <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
                           Active Manager
@@ -335,17 +337,16 @@ export const PublicPortalPage: React.FC = () => {
                       )}
                     </div>
                     <p className="text-xs text-slate-400 mt-0.5">
-                      Period: <strong className="text-slate-300">{currentManager.startDate}</strong> →{' '}
+                      Period: <strong className="text-slate-300">{currentManager.assignmentDate}</strong> →{' '}
                       <strong className="text-slate-300">
-                        {currentManager.isCurrentlyActive ? 'Today' : (currentManager.endDate || 'Completed')}
-                      </strong>{' '}
-                      ({currentManager.totalDays} days)
+                        {isActive ? 'Today' : (currentManager.resignationDate || 'Completed')}
+                      </strong>
                     </p>
                   </div>
                 </div>
 
                 <div className="text-[11px] text-slate-400 self-start sm:self-auto bg-slate-950/60 px-2.5 py-1 rounded-lg border border-slate-800">
-                  {currentManager.isCurrentlyActive ? 'Running Period (Live)' : 'Final Tenure Summary'}
+                  {isActive ? 'Running Period (Live)' : 'Final Tenure Summary'}
                 </div>
               </div>
 
@@ -353,7 +354,7 @@ export const PublicPortalPage: React.FC = () => {
                 {/* 1. Meals */}
                 <div className="bg-slate-950/50 rounded-xl p-3 border border-slate-800/80">
                   <span className="text-[11px] text-slate-400 font-medium block">
-                    {currentManager.isCurrentlyActive ? 'Meals (To Today)' : 'Period Meals'}
+                    {isActive ? 'Meals (To Today)' : 'Period Meals'}
                   </span>
                   <span className="text-lg sm:text-xl font-bold text-white block mt-0.5">
                     {formatNumber(currentManager.totalMeals)}
@@ -365,7 +366,7 @@ export const PublicPortalPage: React.FC = () => {
                 <div className="bg-slate-950/50 rounded-xl p-3 border border-slate-800/80">
                   <span className="text-[11px] text-slate-400 font-medium block">Market Expenses</span>
                   <span className="text-lg sm:text-xl font-bold text-white block mt-0.5">
-                    {currencySymbol}{formatNumber(currentManager.marketExpenses)}
+                    {currencySymbol}{formatNumber(currentManager.totalMarketExpenses)}
                   </span>
                   <span className="text-[10px] text-slate-500 block">Bazaar purchases</span>
                 </div>
@@ -373,7 +374,7 @@ export const PublicPortalPage: React.FC = () => {
                 {/* 3. Meal Rate */}
                 <div className="bg-emerald-950/20 rounded-xl p-3 border border-emerald-500/20">
                   <span className="text-[11px] text-emerald-400 font-medium block">
-                    {currentManager.isCurrentlyActive ? 'Running Meal Rate' : 'Final Meal Rate'}
+                    {isActive ? 'Running Meal Rate' : 'Final Meal Rate'}
                   </span>
                   <span className="text-lg sm:text-xl font-bold text-emerald-300 block mt-0.5">
                     {currencySymbol}{currentManager.mealRate.toFixed(2)}
@@ -386,10 +387,10 @@ export const PublicPortalPage: React.FC = () => {
                 <div className="bg-amber-950/15 rounded-xl p-3 border border-amber-500/20">
                   <span className="text-[11px] text-amber-400 font-medium block">Manager Fee</span>
                   <span className="text-lg sm:text-xl font-bold text-amber-300 block mt-0.5">
-                    {currencySymbol}{formatNumber(currentManager.managerFee)}
+                    {currencySymbol}{formatNumber(currentManager.totalManagerFee)}
                   </span>
                   <span className="text-[10px] text-amber-400/80 block">
-                    @{currencySymbol}{currentManager.feeRatePerMeal}/meal • Separate
+                    @{currencySymbol}{currentManager.managerFeePerMeal}/meal • Separate
                   </span>
                 </div>
               </div>
