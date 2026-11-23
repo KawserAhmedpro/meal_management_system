@@ -25,6 +25,9 @@ export function App() {
         <AppProvider>
           <BrowserRouter basename={import.meta.env.BASE_URL}>
             <Routes>
+              {/* Fallback redirects if accessing subdirectory URLs on root domains */}
+              <Route path="/meal_management_system/*" element={<Navigate to="/" replace />} />
+
               {/* Public Admin Login route */}
               <Route path="/login" element={<LoginPage />} />
 

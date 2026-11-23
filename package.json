@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build && node copy404.js",
+    "build:gh-pages": "tsc && vite build --base=/meal_management_system/ && node copy404.js",
+    "build:vercel": "tsc && vite build --base=/ && node copy404.js",
     "preview": "vite preview"
   },
   "dependencies": {
