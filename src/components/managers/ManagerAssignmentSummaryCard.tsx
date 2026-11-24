@@ -22,6 +22,8 @@ interface ManagerAssignmentSummaryCardProps {
   currencySymbol?: string;
   title?: string;
   subtitle?: string;
+  selectedManagerId?: string;
+  onSelectManagerId?: (managerId: string) => void;
 }
 
 export const ManagerAssignmentSummaryCard: React.FC<ManagerAssignmentSummaryCardProps> = ({
@@ -29,10 +31,23 @@ export const ManagerAssignmentSummaryCard: React.FC<ManagerAssignmentSummaryCard
   currencySymbol = '৳',
   title = 'Manager Assignment Period Accounting',
   subtitle = 'Actual assignment-period financial calculations (independent of calendar months)',
+  selectedManagerId,
+  onSelectManagerId,
 }) => {
-  const [selectedManagerId, setSelectedManagerId] = useState<string>(
+  const [internalSelectedId, setInternalSelectedId] = useState<string>(
     () => summaries.find((s) => s.isCurrentlyActive)?.managerId || summaries[0]?.managerId || ''
   );
+
+  const activeSelectedId = selectedManagerId !== undefined ? selectedManagerId : internalSelectedId;
+
+  const handleManagerChange = (id: string) => {
+    if (selectedManagerId === undefined) {
+      setInternalSelectedId(id);
+    }
+    if (onSelectManagerId) {
+      onSelectManagerId(id);
+    }
+  };
 
   if (summaries.length === 0) {
     return (
@@ -46,7 +61,7 @@ export const ManagerAssignmentSummaryCard: React.FC<ManagerAssignmentSummaryCard
   }
 
   const currentSummary =
-    summaries.find((s) => s.managerId === selectedManagerId) || summaries[0];
+    summaries.find((s) => s.managerId === activeSelectedId) || summaries[0];
 
   return (
     <Card className="overflow-hidden border border-slate-200/90 rounded-3xl shadow-sm bg-white">
@@ -68,12 +83,12 @@ export const ManagerAssignmentSummaryCard: React.FC<ManagerAssignmentSummaryCard
           </div>
 
           {/* Manager Selector Pill / Dropdown if multiple managers */}
-          {summaries.length > 1 && (
+          {summaries.length > 1 ? (
             <div className="flex items-center gap-2 bg-slate-800/90 border border-slate-700/80 rounded-2xl p-1.5 self-start sm:self-auto">
               <span className="text-xs font-semibold text-slate-400 px-2">Manager:</span>
               <select
-                value={selectedManagerId}
-                onChange={(e) => setSelectedManagerId(e.target.value)}
+                value={activeSelectedId}
+                onChange={(e) => handleManagerChange(e.target.value)}
                 className="bg-slate-900 text-white text-xs font-bold rounded-xl px-3 py-1.5 border border-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 cursor-pointer"
               >
                 {summaries.map((s) => (
@@ -82,6 +97,11 @@ export const ManagerAssignmentSummaryCard: React.FC<ManagerAssignmentSummaryCard
                   </option>
                 ))}
               </select>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 bg-slate-800/90 border border-slate-700/80 rounded-2xl px-3 py-1.5 self-start sm:self-auto text-xs text-slate-300">
+              <span className="text-slate-400">Manager:</span>
+              <span className="font-bold text-white">{currentSummary.managerName}</span>
             </div>
           )}
         </div>

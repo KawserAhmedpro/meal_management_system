@@ -447,3 +447,184 @@ export function calculateAllManagerAssignmentPeriods(
     )
   );
 }
+
+export interface ManagerAssignmentDashboardOverview {
+  managerSummary: ManagerAssignmentPeriodSummary;
+  overview: MonthFinancialOverview;
+  memberSummaries: MemberFinancialSummary[];
+  periodMealEntries: MealEntry[];
+  periodExpenses: Expense[];
+  periodDeposits: Deposit[];
+}
+
+/**
+ * Calculates complete Dashboard financial overview and metrics scoped strictly
+ * to the selected manager's assignment period [startDate, effectiveEndDate] inclusive.
+ */
+export function calculateManagerAssignmentDashboardOverview(
+  manager: ManagerPeriod,
+  members: Member[],
+  mealEntries: MealEntry[],
+  expenses: Expense[],
+  deposits: Deposit[],
+  dailyClosures: DailyMealClosure[] = [],
+  defaultFeeRatePerMeal: number = 5,
+  referenceDate?: string
+): ManagerAssignmentDashboardOverview {
+  const managerSummary = calculateManagerAssignmentPeriodAccounting(
+    manager,
+    mealEntries,
+    expenses,
+    dailyClosures,
+    defaultFeeRatePerMeal,
+    referenceDate
+  );
+
+  const startDate = managerSummary.startDate;
+  const effectiveEndDate = managerSummary.effectiveEndDate;
+  const mealRate = managerSummary.mealRate;
+  const feeRatePerMeal = managerSummary.feeRatePerMeal;
+
+  // 1. Identify FULL_OFF dates in this manager's assignment window
+  const fullOffDateSet = new Set<string>();
+  for (const c of dailyClosures) {
+    if (c.status === 'FULL_OFF' && c.date >= startDate && c.date <= effectiveEndDate) {
+      fullOffDateSet.add(c.date);
+    }
+  }
+
+  // 2. Filter period meal entries
+  const periodMealEntries = mealEntries.filter(
+    (m) => m.date >= startDate && m.date <= effectiveEndDate
+  );
+
+  // 3. Filter period expenses (deduplicated by ID)
+  const seenExpIds = new Set<string>();
+  const periodExpenses: Expense[] = [];
+  for (const exp of expenses) {
+    if (exp.date >= startDate && exp.date <= effectiveEndDate) {
+      if (!seenExpIds.has(exp.id)) {
+        seenExpIds.add(exp.id);
+        periodExpenses.push(exp);
+      }
+    }
+  }
+
+  // 4. Filter period deposits (deduplicated by ID)
+  const seenDepIds = new Set<string>();
+  const periodDeposits: Deposit[] = [];
+  for (const dep of deposits) {
+    if (dep.date >= startDate && dep.date <= effectiveEndDate) {
+      if (!seenDepIds.has(dep.id)) {
+        seenDepIds.add(dep.id);
+        periodDeposits.push(dep);
+      }
+    }
+  }
+
+  // 5. Precompute deposits per member in this assignment period
+  const memberDepositsMap = new Map<string, { total: number; count: number }>();
+  for (const dep of periodDeposits) {
+    const cur = memberDepositsMap.get(dep.memberId) || { total: 0, count: 0 };
+    memberDepositsMap.set(dep.memberId, {
+      total: cur.total + (dep.amount || 0),
+      count: cur.count + 1,
+    });
+  }
+
+  // 6. Precompute effective meals per member in this assignment period
+  const memberMealsMap = new Map<string, { raw: number; effective: number }>();
+  for (const entry of periodMealEntries) {
+    const isFullOff = fullOffDateSet.has(entry.date);
+    const cur = memberMealsMap.get(entry.memberId) || { raw: 0, effective: 0 };
+    const raw = entry.count || 0;
+    const effective = isFullOff ? 0 : raw;
+    memberMealsMap.set(entry.memberId, {
+      raw: cur.raw + raw,
+      effective: cur.effective + effective,
+    });
+  }
+
+  // 7. Calculate member-level financial summaries for this manager period
+  const memberSummaries: MemberFinancialSummary[] = members.map((member) => {
+    const mealInfo = memberMealsMap.get(member.id) || { raw: 0, effective: 0 };
+    const mEffectiveMeals = mealInfo.effective;
+    const mRawMeals = mealInfo.raw;
+
+    const mealExpenseWithoutFee = Math.round(mEffectiveMeals * mealRate * 100) / 100;
+    const managerFee = Math.round(mEffectiveMeals * feeRatePerMeal * 100) / 100;
+    const totalPayable = Math.round((mealExpenseWithoutFee + managerFee) * 100) / 100;
+
+    const depInfo = memberDepositsMap.get(member.id) || { total: 0, count: 0 };
+    const totalDeposits = depInfo.total;
+    const due = Math.round((totalPayable - totalDeposits) * 100) / 100;
+
+    return {
+      member,
+      totalMeals: mEffectiveMeals,
+      rawMealsCount: mRawMeals,
+      mealExpenseWithoutFee,
+      managerFee,
+      totalPayable,
+      totalDeposits,
+      due,
+      depositsCount: depInfo.count,
+    };
+  });
+
+  // 8. Aggregate mess totals
+  let totalMealExpenses = 0;
+  let totalPayable = 0;
+  let totalDeposits = 0;
+  let totalDue = 0;
+  let totalAdvance = 0;
+
+  for (const summary of memberSummaries) {
+    totalMealExpenses += summary.mealExpenseWithoutFee;
+    totalPayable += summary.totalPayable;
+    totalDeposits += summary.totalDeposits;
+
+    if (summary.due > 0) {
+      totalDue += summary.due;
+    } else if (summary.due < 0) {
+      totalAdvance += Math.abs(summary.due);
+    }
+  }
+
+  const overview: MonthFinancialOverview = {
+    month: `${startDate} to ${effectiveEndDate}`,
+    totalMembers: members.length,
+    activeMembers: members.filter((m) => m.status === 'Active').length,
+    totalMeals: managerSummary.totalMeals,
+    totalExpenses: managerSummary.totalMarketExpenses,
+    mealRate: managerSummary.mealRate,
+    totalDeposits,
+    totalMealExpenses: Math.round(totalMealExpenses * 100) / 100,
+    totalManagerFees: managerSummary.totalManagerFee,
+    totalPayable: Math.round(totalPayable * 100) / 100,
+    totalDue: Math.round(totalDue * 100) / 100,
+    totalAdvance: Math.round(totalAdvance * 100) / 100,
+    netBalance: Math.round((totalDeposits - totalPayable) * 100) / 100,
+    fullOffDatesCount: fullOffDateSet.size,
+    managerCalculations: [
+      {
+        manager,
+        activeStartDate: startDate,
+        activeEndDate: effectiveEndDate,
+        activeDaysCount: managerSummary.totalDaysAssigned,
+        mealsServed: managerSummary.totalMeals,
+        ratePerMeal: feeRatePerMeal,
+        feeAmount: managerSummary.totalManagerFee,
+      },
+    ],
+  };
+
+  return {
+    managerSummary,
+    overview,
+    memberSummaries,
+    periodMealEntries,
+    periodExpenses,
+    periodDeposits,
+  };
+}

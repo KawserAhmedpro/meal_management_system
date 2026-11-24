@@ -1,10 +1,11 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db';
 import { useApp } from '../../context/AppContext';
 import {
   calculateMonthSummary,
   calculateAllManagerAssignmentPeriods,
+  calculateManagerAssignmentDashboardOverview,
 } from '../../utils/calculations';
 import { formatMonthName } from '../../utils/formatters';
 import { StatCards } from './StatCards';
@@ -18,51 +19,21 @@ import { Calendar, Building, MapPin, Globe, Share2, ExternalLink } from 'lucide-
 export const DashboardPage: React.FC = () => {
   const { selectedMonth, settings, publicPortalUrl } = useApp();
 
+  // Selected manager ID for controlling the entire dashboard
+  const [selectedManagerId, setSelectedManagerId] = useState<string>('');
+
   // Reactive live queries from IndexedDB
   const members = useLiveQuery(() => db.members.toArray(), []) || [];
-  const mealEntries =
-    useLiveQuery(
-      () => db.mealEntries.where('month').equals(selectedMonth).toArray(),
-      [selectedMonth]
-    ) || [];
-  const expenses =
-    useLiveQuery(
-      () => db.expenses.where('month').equals(selectedMonth).toArray(),
-      [selectedMonth]
-    ) || [];
-  const deposits =
-    useLiveQuery(
-      () => db.deposits.where('month').equals(selectedMonth).toArray(),
-      [selectedMonth]
-    ) || [];
-  const closures =
-    useLiveQuery(
-      () => db.dailyClosures.where('month').equals(selectedMonth).toArray(),
-      [selectedMonth]
-    ) || [];
   const managers =
     useLiveQuery(() => db.managers.orderBy('startDate').toArray(), []) || [];
 
-  // Calculate actual statistics from IndexedDB records
-  const { overview, memberSummaries } = calculateMonthSummary(
-    selectedMonth,
-    members,
-    mealEntries,
-    expenses,
-    deposits,
-    settings.managerFeePerMeal || 5,
-    closures,
-    managers
-  );
-
-  const activeManagers = managers.filter((m) => m.status === 'Active');
-  const activeManagerDisplay = activeManagers.map((m) => m.name).join(', ') || settings.managerName || 'Manager';
-
-  // All entries across all months for Manager Assignment-Period Accounting
+  // All entries across all dates for comprehensive Manager Assignment-Period Accounting
   const allMealEntries = useLiveQuery(() => db.mealEntries.toArray(), []) || [];
   const allExpenses = useLiveQuery(() => db.expenses.toArray(), []) || [];
+  const allDeposits = useLiveQuery(() => db.deposits.toArray(), []) || [];
   const allClosures = useLiveQuery(() => db.dailyClosures.toArray(), []) || [];
 
+  // 1. Compute assignment period summaries for all managers
   const managerAssignmentSummaries = useMemo(() => {
     return calculateAllManagerAssignmentPeriods(
       managers,
@@ -72,6 +43,103 @@ export const DashboardPage: React.FC = () => {
       settings.managerFeePerMeal || 5
     );
   }, [managers, allMealEntries, allExpenses, allClosures, settings.managerFeePerMeal]);
+
+  // 2. Determine effective selected manager ID (default to active manager, or first manager)
+  const effectiveSelectedManagerId = useMemo(() => {
+    if (
+      selectedManagerId &&
+      managerAssignmentSummaries.some((s) => s.managerId === selectedManagerId)
+    ) {
+      return selectedManagerId;
+    }
+    const active = managerAssignmentSummaries.find((s) => s.isCurrentlyActive);
+    if (active) return active.managerId;
+    return managerAssignmentSummaries[0]?.managerId || '';
+  }, [selectedManagerId, managerAssignmentSummaries]);
+
+  // 3. Find selected manager object
+  const selectedManager = useMemo(() => {
+    return managers.find((m) => m.id === effectiveSelectedManagerId) || null;
+  }, [managers, effectiveSelectedManagerId]);
+
+  // 4. Calculate full Dashboard overview scoped to the selected manager's assignment period
+  const managerPeriodData = useMemo(() => {
+    if (!selectedManager) return null;
+    return calculateManagerAssignmentDashboardOverview(
+      selectedManager,
+      members,
+      allMealEntries,
+      allExpenses,
+      allDeposits,
+      allClosures,
+      settings.managerFeePerMeal || 5
+    );
+  }, [
+    selectedManager,
+    members,
+    allMealEntries,
+    allExpenses,
+    allDeposits,
+    allClosures,
+    settings.managerFeePerMeal,
+  ]);
+
+  // 5. Fallback month data if no manager exists or is selected
+  const monthData = useMemo(() => {
+    const mMeals = allMealEntries.filter((m) => m.month === selectedMonth);
+    const mExpenses = allExpenses.filter((e) => e.month === selectedMonth);
+    const mDeposits = allDeposits.filter((d) => d.month === selectedMonth);
+    const mClosures = allClosures.filter((c) => c.month === selectedMonth);
+    return calculateMonthSummary(
+      selectedMonth,
+      members,
+      mMeals,
+      mExpenses,
+      mDeposits,
+      settings.managerFeePerMeal || 5,
+      mClosures,
+      managers
+    );
+  }, [
+    selectedMonth,
+    members,
+    allMealEntries,
+    allExpenses,
+    allDeposits,
+    allClosures,
+    settings.managerFeePerMeal,
+    managers,
+  ]);
+
+  // Effective Dashboard data sources based on manager selection
+  const activeOverview = managerPeriodData ? managerPeriodData.overview : monthData.overview;
+  const activeMemberSummaries = managerPeriodData
+    ? managerPeriodData.memberSummaries
+    : monthData.memberSummaries;
+  const activeExpenses = managerPeriodData
+    ? managerPeriodData.periodExpenses
+    : allExpenses.filter((e) => e.month === selectedMonth);
+  const activeMealEntries = managerPeriodData
+    ? managerPeriodData.periodMealEntries
+    : allMealEntries.filter((m) => m.month === selectedMonth);
+  const activeDeposits = managerPeriodData
+    ? managerPeriodData.periodDeposits
+    : allDeposits.filter((d) => d.month === selectedMonth);
+
+  const periodDateRange = managerPeriodData
+    ? {
+        startDate: managerPeriodData.managerSummary.startDate,
+        endDate: managerPeriodData.managerSummary.effectiveEndDate,
+      }
+    : undefined;
+
+  const periodLabel = managerPeriodData
+    ? `${managerPeriodData.managerSummary.managerName} (${managerPeriodData.managerSummary.startDate} → ${managerPeriodData.managerSummary.effectiveEndDate})`
+    : undefined;
+
+  const activeManagers = managers.filter((m) => m.status === 'Active');
+  const activeManagerDisplay =
+    activeManagers.map((m) => m.name).join(', ') || settings.managerName || 'Manager';
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
@@ -87,18 +155,56 @@ export const DashboardPage: React.FC = () => {
               <Building className="w-3.5 h-3.5" />
               <span>{settings.institutionName || 'Mymensingh Engineering College'}</span>
             </div>
-            <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white">
-              {settings.hallName || 'Omar Ekushe Hall'} — Manager: {activeManagerDisplay}
-            </h2>
+            <div className="flex flex-wrap items-center gap-3">
+              <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white">
+                {settings.hallName || 'Omar Ekushe Hall'} — Manager:{' '}
+                {selectedManager ? selectedManager.name : activeManagerDisplay}
+              </h2>
+              {selectedManager && (
+                <span
+                  className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold ${
+                    selectedManager.status === 'Active'
+                      ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                      : 'bg-slate-700/80 text-slate-300 border border-slate-600'
+                  }`}
+                >
+                  <span
+                    className={`w-1.5 h-1.5 rounded-full ${
+                      selectedManager.status === 'Active'
+                        ? 'bg-emerald-400 animate-pulse'
+                        : 'bg-slate-400'
+                    }`}
+                  />
+                  {selectedManager.status === 'Active' ? 'Active Manager' : 'Resigned Manager'}
+                </span>
+              )}
+            </div>
             <div className="flex flex-wrap items-center gap-2 mt-1">
-              <p className="text-slate-300 text-xs sm:text-sm flex items-center gap-1.5">
-                <MapPin className="w-3.5 h-3.5 text-slate-400" />
-                Financial & meal management overview for{' '}
-                <strong className="text-emerald-300 font-semibold">{formatMonthName(selectedMonth)}</strong>.
-              </p>
-              {overview.fullOffDatesCount > 0 && (
+              {selectedManager && managerPeriodData ? (
+                <p className="text-slate-300 text-xs sm:text-sm flex items-center gap-1.5">
+                  <MapPin className="w-3.5 h-3.5 text-slate-400" />
+                  Assignment Period:{' '}
+                  <strong className="text-emerald-300 font-semibold">
+                    {managerPeriodData.managerSummary.startDate} →{' '}
+                    {managerPeriodData.managerSummary.effectiveEndDate}
+                  </strong>{' '}
+                  ({managerPeriodData.managerSummary.totalDaysAssigned} calendar days
+                  {selectedManager.status === 'Active' ? ' — live through today' : ''}).
+                </p>
+              ) : (
+                <p className="text-slate-300 text-xs sm:text-sm flex items-center gap-1.5">
+                  <MapPin className="w-3.5 h-3.5 text-slate-400" />
+                  Financial & meal management overview for{' '}
+                  <strong className="text-emerald-300 font-semibold">
+                    {formatMonthName(selectedMonth)}
+                  </strong>
+                  .
+                </p>
+              )}
+              {activeOverview.fullOffDatesCount > 0 && (
                 <span className="bg-rose-500/20 text-rose-300 border border-rose-500/30 px-2 py-0.5 rounded-full text-xs font-semibold">
-                  {overview.fullOffDatesCount} Full Meal OFF {overview.fullOffDatesCount === 1 ? 'Day' : 'Days'}
+                  {activeOverview.fullOffDatesCount} Full Meal OFF{' '}
+                  {activeOverview.fullOffDatesCount === 1 ? 'Day' : 'Days'}
                 </span>
               )}
             </div>
@@ -110,10 +216,12 @@ export const DashboardPage: React.FC = () => {
             </div>
             <div>
               <span className="text-[10px] text-slate-400 uppercase tracking-wider block font-semibold">
-                Active Cycle
+                {selectedManager ? 'Assignment Tenure' : 'Active Cycle'}
               </span>
-              <span className="text-sm font-bold text-white block">
-                {formatMonthName(selectedMonth)}
+              <span className="text-xs sm:text-sm font-bold text-white block">
+                {selectedManager && managerPeriodData
+                  ? `${managerPeriodData.managerSummary.startDate} → ${managerPeriodData.managerSummary.effectiveEndDate}`
+                  : formatMonthName(selectedMonth)}
               </span>
             </div>
           </div>
@@ -162,33 +270,37 @@ export const DashboardPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Manager Assignment Period Accounting Summary */}
+      {/* Manager Assignment Period Accounting Summary (Controls Entire Dashboard via Dropdown) */}
       {managerAssignmentSummaries.length > 0 && (
         <ManagerAssignmentSummaryCard
           summaries={managerAssignmentSummaries}
           currencySymbol={settings.currencySymbol}
+          selectedManagerId={effectiveSelectedManagerId}
+          onSelectManagerId={(id) => setSelectedManagerId(id)}
         />
       )}
 
-      {/* 8 Core Financial & Mess Summary Cards */}
-      <StatCards overview={overview} currencySymbol={settings.currencySymbol} />
+      {/* 8 Core Financial & Mess Summary Cards (Recalculated for Selected Manager) */}
+      <StatCards overview={activeOverview} currencySymbol={settings.currencySymbol} />
 
       {/* Quick Action Center */}
       <QuickActions />
 
-      {/* Charts Module */}
+      {/* Charts Module (Recalculated for Selected Manager) */}
       <DashboardCharts
-        expenses={expenses}
-        mealEntries={mealEntries}
-        memberSummaries={memberSummaries}
+        expenses={activeExpenses}
+        mealEntries={activeMealEntries}
+        memberSummaries={activeMemberSummaries}
         currencySymbol={settings.currencySymbol}
         selectedMonth={selectedMonth}
+        periodLabel={periodLabel}
+        dateRange={periodDateRange}
       />
 
-      {/* Recent Activities: Expenses & Deposits */}
+      {/* Recent Activities: Expenses & Deposits (Scoped to Selected Manager's Period) */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <RecentExpenses expenses={expenses} currencySymbol={settings.currencySymbol} />
-        <RecentDeposits deposits={deposits} currencySymbol={settings.currencySymbol} />
+        <RecentExpenses expenses={activeExpenses} currencySymbol={settings.currencySymbol} />
+        <RecentDeposits deposits={activeDeposits} currencySymbol={settings.currencySymbol} />
       </div>
     </div>
   );

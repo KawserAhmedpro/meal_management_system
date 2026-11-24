@@ -24,6 +24,8 @@ interface DashboardChartsProps {
   memberSummaries: MemberFinancialSummary[];
   currencySymbol?: string;
   selectedMonth: string;
+  periodLabel?: string;
+  dateRange?: { startDate: string; endDate: string };
 }
 
 const COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#64748b'];
@@ -34,37 +36,71 @@ export const DashboardCharts: React.FC<DashboardChartsProps> = ({
   memberSummaries,
   currencySymbol = '৳',
   selectedMonth,
+  periodLabel,
+  dateRange,
 }) => {
-  // 1. Daily Meal Consumption Data (Day 1 to 31)
-  const daysInMonth = new Date(
-    parseInt(selectedMonth.split('-')[0]),
-    parseInt(selectedMonth.split('-')[1]),
-    0
-  ).getDate();
+  // 1. Daily Meal Consumption Data
+  let dailyMealChartData: { day: string; meals: number }[] = [];
 
-  const dailyMealMap: { [key: number]: number } = {};
-  for (let d = 1; d <= daysInMonth; d++) {
-    dailyMealMap[d] = 0;
-  }
+  if (dateRange && dateRange.startDate && dateRange.endDate) {
+    const dailyMealMap: { [dateStr: string]: number } = {};
+    const curr = new Date(dateRange.startDate);
+    const end = new Date(dateRange.endDate);
 
-  for (const entry of mealEntries) {
-    if (entry.month === selectedMonth) {
-      const dayNum = parseInt(entry.date.split('-')[2]);
-      if (dayNum) {
-        dailyMealMap[dayNum] = (dailyMealMap[dayNum] || 0) + (entry.count || 0);
+    while (curr <= end) {
+      const y = curr.getFullYear();
+      const m = String(curr.getMonth() + 1).padStart(2, '0');
+      const d = String(curr.getDate()).padStart(2, '0');
+      const dateKey = `${y}-${m}-${d}`;
+      dailyMealMap[dateKey] = 0;
+      curr.setDate(curr.getDate() + 1);
+    }
+
+    for (const entry of mealEntries) {
+      if (dailyMealMap[entry.date] !== undefined) {
+        dailyMealMap[entry.date] += entry.count || 0;
       }
     }
-  }
 
-  const dailyMealChartData = Object.keys(dailyMealMap).map((dayStr) => ({
-    day: `D${dayStr}`,
-    meals: dailyMealMap[parseInt(dayStr)],
-  }));
+    dailyMealChartData = Object.keys(dailyMealMap).map((dateKey) => {
+      const parts = dateKey.split('-');
+      return {
+        day: `${parts[1]}/${parts[2]}`,
+        meals: dailyMealMap[dateKey],
+      };
+    });
+  } else {
+    const daysInMonth = new Date(
+      parseInt(selectedMonth.split('-')[0]),
+      parseInt(selectedMonth.split('-')[1]),
+      0
+    ).getDate();
+
+    const dailyMealMap: { [key: number]: number } = {};
+    for (let d = 1; d <= daysInMonth; d++) {
+      dailyMealMap[d] = 0;
+    }
+
+    for (const entry of mealEntries) {
+      if (entry.month === selectedMonth) {
+        const dayNum = parseInt(entry.date.split('-')[2]);
+        if (dayNum) {
+          dailyMealMap[dayNum] = (dailyMealMap[dayNum] || 0) + (entry.count || 0);
+        }
+      }
+    }
+
+    dailyMealChartData = Object.keys(dailyMealMap).map((dayStr) => ({
+      day: `D${dayStr}`,
+      meals: dailyMealMap[parseInt(dayStr)],
+    }));
+  }
 
   // 2. Category-wise Expenses Data
   const categoryMap: { [key: string]: number } = {};
   for (const exp of expenses) {
-    if (exp.month === selectedMonth) {
+    const inScope = dateRange ? true : exp.month === selectedMonth;
+    if (inScope) {
       const cat = exp.category || 'Other';
       categoryMap[cat] = (categoryMap[cat] || 0) + (exp.amount || 0);
     }
@@ -93,7 +129,7 @@ export const DashboardCharts: React.FC<DashboardChartsProps> = ({
       <Card>
         <CardHeader
           title="Daily Meal Consumption"
-          subtitle={`Total meals served per day for ${selectedMonth}`}
+          subtitle={periodLabel ? `Daily meals served during ${periodLabel}` : `Total meals served per day for ${selectedMonth}`}
         />
         <CardContent>
           <div className="h-64 w-full">
@@ -131,12 +167,14 @@ export const DashboardCharts: React.FC<DashboardChartsProps> = ({
       <Card>
         <CardHeader
           title="Market Expense Breakdown"
-          subtitle="Expense distribution by category"
+          subtitle={periodLabel ? `Expense distribution for ${periodLabel}` : "Expense distribution by category"}
         />
         <CardContent>
           <div className="h-64 w-full flex items-center justify-center">
             {categoryChartData.length === 0 ? (
-              <div className="text-xs text-slate-400">No expenses recorded for this month.</div>
+              <div className="text-xs text-slate-400">
+                {periodLabel ? `No expenses recorded for ${periodLabel}.` : "No expenses recorded for this month."}
+              </div>
             ) : (
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
