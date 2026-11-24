@@ -34,7 +34,7 @@ export const ManagerModal: React.FC<ManagerModalProps> = ({
   existingManagers,
   onSuccess,
 }) => {
-  const { selectedMonth, settings, updateSettings } = useApp();
+  const { selectedMonth, settings, updateSettings, saveManager } = useApp();
   const [overlapWarning, setOverlapWarning] = useState<string | null>(null);
 
   const defaultStart = `${selectedMonth}-01`;
@@ -146,39 +146,44 @@ export const ManagerModal: React.FC<ManagerModalProps> = ({
       data.feeRateOverride.trim() !== '' ? Number(data.feeRateOverride) : undefined;
 
     if (managerToEdit) {
-      await db.managers.update(managerToEdit.id, {
-        name: data.name,
-        phone: data.phone || undefined,
+      const updated: ManagerPeriod = {
+        ...managerToEdit,
+        name: data.name.trim(),
+        phone: data.phone.trim() || undefined,
         startDate: data.startDate,
         endDate: cleanEndDate,
         status: cleanEndDate ? 'Resigned' : data.status,
         feeRateOverride: rateOverride,
-        notes: data.notes || undefined,
+        notes: data.notes.trim() || undefined,
         updatedAt: now,
-      });
+      };
+
+      await saveManager(updated);
 
       // If this manager is currently active, update settings.managerName
       if (!cleanEndDate) {
-        await updateSettings({ managerName: data.name });
+        await updateSettings({ managerName: data.name.trim() });
       }
     } else {
       const newId = `MGR-${Date.now()}`;
-      await db.managers.add({
+      const newManager: ManagerPeriod = {
         id: newId,
-        name: data.name,
-        phone: data.phone || undefined,
+        name: data.name.trim(),
+        phone: data.phone.trim() || undefined,
         startDate: data.startDate,
         endDate: cleanEndDate,
         status: cleanEndDate ? 'Resigned' : data.status,
         feeRateOverride: rateOverride,
-        notes: data.notes || undefined,
+        notes: data.notes.trim() || undefined,
         createdAt: now,
         updatedAt: now,
-      });
+      };
+
+      await saveManager(newManager);
 
       // If active, update settings
       if (!cleanEndDate) {
-        await updateSettings({ managerName: data.name });
+        await updateSettings({ managerName: data.name.trim() });
       }
     }
 

@@ -52,6 +52,29 @@ export function getCollectionRef<T = DocumentData>(collectionName: string): Coll
 // Document Upsert & Delete operations with stable IDs and conflict metadata
 // -----------------------------------------------------------------------------
 
+/**
+ * Recursively strips undefined fields from an object or array.
+ * Firestore strictly rejects documents containing undefined values.
+ */
+export function removeUndefined<T>(obj: T): T {
+  if (obj === null || obj === undefined) {
+    return null as unknown as T;
+  }
+  if (Array.isArray(obj)) {
+    return obj.map((item) => removeUndefined(item)) as unknown as T;
+  }
+  if (typeof obj === 'object') {
+    const cleaned: Record<string, any> = {};
+    for (const [key, val] of Object.entries(obj)) {
+      if (val !== undefined) {
+        cleaned[key] = removeUndefined(val);
+      }
+    }
+    return cleaned as T;
+  }
+  return obj;
+}
+
 export async function upsertFirestoreDoc<T extends { id?: string }>(
   collectionName: string,
   docId: string,
@@ -61,9 +84,10 @@ export async function upsertFirestoreDoc<T extends { id?: string }>(
 
   const docRef = doc(firestore, collectionName, docId);
   const now = Date.now();
+  const cleaned = removeUndefined(data);
 
   const payload = {
-    ...data,
+    ...cleaned,
     id: docId,
     _lastModifiedLocally: now,
     _serverTimestamp: serverTimestamp(),
@@ -101,8 +125,9 @@ export async function batchWriteDocs<T extends { id?: string }>(
     for (const item of chunk) {
       const docId = getId(item);
       const docRef = doc(firestore, collectionName, docId);
+      const cleaned = removeUndefined(item);
       const payload = {
-        ...item,
+        ...cleaned,
         id: docId,
         _lastModifiedLocally: Date.now(),
         _serverTimestamp: serverTimestamp(),

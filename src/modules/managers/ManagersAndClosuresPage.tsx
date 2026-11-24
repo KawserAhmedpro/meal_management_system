@@ -37,7 +37,14 @@ import {
 } from 'lucide-react';
 
 export const ManagersAndClosuresPage: React.FC = () => {
-  const { selectedMonth, settings } = useApp();
+  const {
+    selectedMonth,
+    settings,
+    saveManager,
+    deleteManager,
+    saveDailyClosure,
+    deleteDailyClosure,
+  } = useApp();
   const [activeTab, setActiveTab] = useState<'managers' | 'closures'>('managers');
 
   // Modals state
@@ -140,11 +147,13 @@ export const ManagersAndClosuresPage: React.FC = () => {
   const handleQuickResign = async () => {
     if (!resignManager || !resignationDate) return;
     try {
-      await db.managers.update(resignManager.id, {
+      const updated: ManagerPeriod = {
+        ...resignManager,
         endDate: resignationDate,
         status: 'Resigned',
         updatedAt: Date.now(),
-      });
+      };
+      await saveManager(updated);
       setResignManager(null);
       setResignationDate('');
     } catch (err) {
@@ -157,10 +166,10 @@ export const ManagersAndClosuresPage: React.FC = () => {
     try {
       if (dayInfo.isFullOff) {
         // Toggle to regular ON -> remove record from closures
-        await db.dailyClosures.delete(dayInfo.date);
+        await deleteDailyClosure(dayInfo.date);
       } else {
         // Toggle to FULL OFF with default reason
-        await db.dailyClosures.put({
+        await saveDailyClosure({
           date: dayInfo.date,
           month: selectedMonth,
           status: 'FULL_OFF',
@@ -806,7 +815,7 @@ export const ManagersAndClosuresPage: React.FC = () => {
         variant="danger"
         onConfirm={async () => {
           if (managerToDelete) {
-            await db.managers.delete(managerToDelete.id);
+            await deleteManager(managerToDelete.id);
             setManagerToDelete(null);
           }
         }}
@@ -822,7 +831,7 @@ export const ManagersAndClosuresPage: React.FC = () => {
         variant="warning"
         onConfirm={async () => {
           if (closureToDelete) {
-            await db.dailyClosures.delete(closureToDelete.date);
+            await deleteDailyClosure(closureToDelete.date);
             setClosureToDelete(null);
           }
         }}
