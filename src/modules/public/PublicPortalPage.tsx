@@ -43,6 +43,7 @@ import {
 export const PublicPortalPage: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const urlMonth = searchParams.get('month');
+  const urlManager = searchParams.get('manager');
 
   // Metadata & Month Data states
   const [meta, setMeta] = useState<PublicPortalMeta | null>(null);
@@ -50,6 +51,7 @@ export const PublicPortalPage: React.FC = () => {
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isOnline, setIsOnline] = useState<boolean>(navigator.onLine);
   const [selectedMonth, setSelectedMonth] = useState<string>(urlMonth || '2026-03');
+  const [selectedManagerId, setSelectedManagerId] = useState<string | null>(urlManager || null);
 
   // UI state
   const [activeTab, setActiveTab] = useState<'meals' | 'expenses' | 'members' | 'breakdown'>('meals');
@@ -71,7 +73,7 @@ export const PublicPortalPage: React.FC = () => {
     };
   }, []);
 
-  // Subscribe to Public Portal Metadata (available months, mess name)
+  // Subscribe to Public Portal Metadata (available months, mess name, manager list)
   useEffect(() => {
     const unsubscribe = subscribeToPublicMeta((data) => {
       if (data) {
@@ -83,6 +85,13 @@ export const PublicPortalPage: React.FC = () => {
     });
     return () => unsubscribe();
   }, [urlMonth]);
+
+  // Synchronize URL manager parameter with local state
+  useEffect(() => {
+    if (urlManager) {
+      setSelectedManagerId(urlManager);
+    }
+  }, [urlManager]);
 
   // Subscribe to selected month's sanitized public data
   useEffect(() => {
@@ -101,19 +110,32 @@ export const PublicPortalPage: React.FC = () => {
     return () => unsubscribe();
   }, [selectedMonth]);
 
-  // Update URL search param on month change
-  const handleMonthChange = (newMonth: string) => {
-    setSelectedMonth(newMonth);
-    setSearchParams({ month: newMonth });
-  };
+  // Available managers list from meta
+  const availableManagers = useMemo<PublicCurrentManagerSummary[]>(() => {
+    if (meta?.availableManagers && meta.availableManagers.length > 0) {
+      return meta.availableManagers;
+    }
+    if (meta?.currentManager) {
+      return [meta.currentManager];
+    }
+    return [];
+  }, [meta]);
 
-  const handleCopyLink = () => {
-    const url = getPublicPortalUrl();
-    navigator.clipboard.writeText(url).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2500);
-    });
-  };
+  const activeManager = useMemo(() => {
+    return availableManagers.find((m) => m.status === 'active') || availableManagers[0] || null;
+  }, [availableManagers]);
+
+  // Selected manager resolution
+  const selectedManager = useMemo(() => {
+    if (selectedManagerId === 'month') return null;
+    if (selectedManagerId) {
+      const found = availableManagers.find(
+        (m) => (m.id && m.id === selectedManagerId) || m.managerName === selectedManagerId
+      );
+      if (found) return found;
+    }
+    return activeManager;
+  }, [availableManagers, selectedManagerId, activeManager]);
 
   // Available months list
   const availableMonths = useMemo(() => {
@@ -126,10 +148,85 @@ export const PublicPortalPage: React.FC = () => {
     return Array.from(set).sort().reverse();
   }, [meta, selectedMonth]);
 
-  // Filtered expenses
+  // Today's date string (YYYY-MM-DD)
+  const todayStr = useMemo(() => {
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = String(now.getMonth() + 1).padStart(2, '0');
+    const d = String(now.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }, []);
+
+  // Update URL search param on month change
+  const handleMonthChange = (newMonth: string) => {
+    setSelectedMonth(newMonth);
+    const params: Record<string, string> = { month: newMonth };
+    if (selectedManagerId) {
+      params.manager = selectedManagerId;
+    }
+    setSearchParams(params);
+  };
+
+  // Update URL search param on manager change
+  const handleManagerChange = (managerKey: string) => {
+    setSelectedManagerId(managerKey);
+    const params: Record<string, string> = {};
+    if (managerKey !== 'month') {
+      params.manager = managerKey;
+      const targetMgr = availableManagers.find(
+        (m) => (m.id && m.id === managerKey) || m.managerName === managerKey
+      );
+      if (targetMgr && targetMgr.assignmentDate) {
+        const mgrMonth = targetMgr.assignmentDate.slice(0, 7);
+        if (availableMonths.includes(mgrMonth) && selectedMonth !== mgrMonth) {
+          setSelectedMonth(mgrMonth);
+          params.month = mgrMonth;
+        } else {
+          params.month = selectedMonth;
+        }
+      } else {
+        params.month = selectedMonth;
+      }
+    } else {
+      params.month = selectedMonth;
+    }
+    setSearchParams(params);
+  };
+
+  const handleCopyLink = () => {
+    const base = getPublicPortalUrl();
+    const url = new URL(base);
+    if (selectedMonth) url.searchParams.set('month', selectedMonth);
+    if (selectedManagerId && selectedManagerId !== 'month') {
+      url.searchParams.set('manager', selectedManagerId);
+    }
+    navigator.clipboard.writeText(url.toString()).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2500);
+    });
+  };
+
+  // Displayed Daily Meal Summaries (filtered to selected manager's period if active)
+  const displayedDailyMealSummaries = useMemo(() => {
+    if (!monthData?.dailyMealSummaries) return [];
+    if (!selectedManager) return monthData.dailyMealSummaries;
+    const start = selectedManager.assignmentDate;
+    const end = selectedManager.status === 'active' ? todayStr : (selectedManager.resignationDate || todayStr);
+    return monthData.dailyMealSummaries.filter(
+      (d) => d.date >= start && d.date <= end
+    );
+  }, [monthData?.dailyMealSummaries, selectedManager, todayStr]);
+
+  // Filtered expenses (filtered by category, search, and manager's assignment period)
   const filteredExpenses = useMemo(() => {
     if (!monthData?.expenses) return [];
-    return monthData.expenses.filter((exp) => {
+    let list = monthData.expenses;
+    if (selectedManager) {
+      const start = selectedManager.assignmentDate;
+      const end = selectedManager.status === 'active' ? todayStr : (selectedManager.resignationDate || todayStr);
+      list = list.filter((exp) => exp.date >= start && exp.date <= end);
+    }
+    return list.filter((exp) => {
       const matchesSearch =
         !expenseSearch.trim() ||
         exp.title.toLowerCase().includes(expenseSearch.toLowerCase()) ||
@@ -142,7 +239,7 @@ export const PublicPortalPage: React.FC = () => {
 
       return matchesSearch && matchesCat;
     });
-  }, [monthData?.expenses, expenseSearch, selectedCategory]);
+  }, [monthData?.expenses, selectedManager, todayStr, expenseSearch, selectedCategory]);
 
   // Distinct expense categories
   const expenseCategories = useMemo(() => {
@@ -153,6 +250,34 @@ export const PublicPortalPage: React.FC = () => {
     });
     return Array.from(cats);
   }, [monthData?.expenses]);
+
+  // Member meal counts scoped to selected manager's assignment period within this month
+  const memberPeriodMealsMap = useMemo(() => {
+    const map = new Map<string, number>();
+    if (!monthData?.members) return map;
+    if (!selectedManager) {
+      monthData.members.forEach((m) => map.set(m.id, m.totalMeals));
+      return map;
+    }
+    const start = selectedManager.assignmentDate;
+    const end = selectedManager.status === 'active' ? todayStr : (selectedManager.resignationDate || todayStr);
+
+    const validDays = (monthData.dailyMealSummaries || []).filter(
+      (d) => d.date >= start && d.date <= end && d.status !== 'FULL_OFF'
+    );
+
+    for (const member of monthData.members) {
+      let count = 0;
+      for (const day of validDays) {
+        const entry = monthData.memberDailyMeals[`${member.id}_${day.day}`];
+        if (entry && entry.count) {
+          count += entry.count;
+        }
+      }
+      map.set(member.id, count);
+    }
+    return map;
+  }, [monthData, selectedManager, todayStr]);
 
   // Filtered members
   const filteredMembers = useMemo(() => {
@@ -166,15 +291,6 @@ export const PublicPortalPage: React.FC = () => {
         m.floor.toLowerCase().includes(q)
     );
   }, [monthData?.members, memberSearch]);
-
-  // Today's summary
-  const todayStr = useMemo(() => {
-    const now = new Date();
-    const y = now.getFullYear();
-    const m = String(now.getMonth() + 1).padStart(2, '0');
-    const d = String(now.getDate()).padStart(2, '0');
-    return `${y}-${m}-${d}`;
-  }, []);
 
   const todayMealSummary = useMemo(() => {
     if (!monthData?.dailyMealSummaries) return null;
@@ -305,17 +421,56 @@ export const PublicPortalPage: React.FC = () => {
           </div>
         </div>
 
-        {/* Manager Assignment-Period Public Operational Summary (Single Authoritative Source from meta) */}
+        {/* Manager Assignment-Period Public Operational Summary */}
         {(() => {
-          const currentManager = meta?.currentManager;
+          const displayManager = selectedManager;
           const currencySymbol = meta?.currencySymbol || '৳';
-          if (!currentManager) return null;
 
-          const isActive = currentManager.status === 'active';
+          if (selectedManagerId === 'month') {
+            return (
+              <div className="bg-slate-900/90 border border-slate-800/80 rounded-2xl p-4 sm:p-5 text-white shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-400 flex items-center justify-center shrink-0">
+                    <Calendar className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <span className="text-sm font-bold text-white">Month-Wide Operational View ({formatMonthName(selectedMonth)})</span>
+                    <p className="text-xs text-slate-400 mt-0.5">Showing general dining summary for the full calendar month.</p>
+                  </div>
+                </div>
+                {availableManagers.length > 0 && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-slate-400 hidden sm:inline">Manager:</span>
+                    <select
+                      aria-label="Select Manager Assignment Period"
+                      value="month"
+                      onChange={(e) => handleManagerChange(e.target.value)}
+                      className="bg-slate-800 border border-slate-700 text-slate-200 text-xs font-semibold rounded-xl px-3 py-1.5 outline-none focus:border-emerald-500"
+                    >
+                      <option value="month">Month-Wide View ({formatMonthName(selectedMonth)})</option>
+                      {availableManagers.map((m) => {
+                        const val = m.id || m.managerName;
+                        const statusText = m.status === 'active' ? 'Active' : 'Resigned';
+                        const endLabel = m.status === 'active' ? 'Today' : (m.resignationDate || 'End');
+                        return (
+                          <option key={val} value={val}>
+                            {m.managerName} ({statusText} • {m.assignmentDate} → {endLabel})
+                          </option>
+                        );
+                      })}
+                    </select>
+                  </div>
+                )}
+              </div>
+            );
+          }
+
+          if (!displayManager) return null;
+          const isActive = displayManager.status === 'active';
 
           return (
             <div className="bg-slate-900/90 border border-slate-800/80 rounded-2xl p-4 sm:p-5 text-white shadow-sm">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-3 border-b border-slate-800/80">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-800/80">
                 <div className="flex items-center gap-2.5">
                   <div className="w-8 h-8 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0">
                     <UserCheck className="w-4 h-4" />
@@ -323,7 +478,7 @@ export const PublicPortalPage: React.FC = () => {
                   <div>
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="text-sm font-bold text-white">
-                        {currentManager.managerName}
+                        {displayManager.managerName}
                       </span>
                       {isActive ? (
                         <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
@@ -337,16 +492,39 @@ export const PublicPortalPage: React.FC = () => {
                       )}
                     </div>
                     <p className="text-xs text-slate-400 mt-0.5">
-                      Period: <strong className="text-slate-300">{currentManager.assignmentDate}</strong> →{' '}
+                      Period: <strong className="text-slate-300">{displayManager.assignmentDate}</strong> →{' '}
                       <strong className="text-slate-300">
-                        {isActive ? 'Today' : (currentManager.resignationDate || 'Completed')}
+                        {isActive ? 'Today' : (displayManager.resignationDate || 'Completed')}
                       </strong>
                     </p>
                   </div>
                 </div>
 
-                <div className="text-[11px] text-slate-400 self-start sm:self-auto bg-slate-950/60 px-2.5 py-1 rounded-lg border border-slate-800">
-                  {isActive ? 'Running Period (Live)' : 'Final Tenure Summary'}
+                {/* Manager Dropdown Selector in header */}
+                <div className="flex items-center gap-2 self-start sm:self-auto">
+                  <select
+                    id="public-manager-select"
+                    aria-label="Select Manager Assignment Period"
+                    value={displayManager.id || displayManager.managerName}
+                    onChange={(e) => handleManagerChange(e.target.value)}
+                    className="bg-slate-800 border border-slate-700 hover:border-emerald-500/50 text-slate-200 text-xs font-semibold rounded-xl px-3 py-1.5 outline-none focus:border-emerald-500 transition-colors cursor-pointer"
+                  >
+                    {availableManagers.map((m) => {
+                      const val = m.id || m.managerName;
+                      const statusText = m.status === 'active' ? 'Active' : 'Resigned';
+                      const endLabel = m.status === 'active' ? 'Today' : (m.resignationDate || 'End');
+                      return (
+                        <option key={val} value={val}>
+                          {m.managerName} ({statusText} • {m.assignmentDate} → {endLabel})
+                        </option>
+                      );
+                    })}
+                    <option value="month">Month-Wide View ({formatMonthName(selectedMonth)})</option>
+                  </select>
+
+                  <div className="text-[11px] text-slate-400 hidden md:block bg-slate-950/60 px-2.5 py-1 rounded-lg border border-slate-800 whitespace-nowrap">
+                    {isActive ? 'Running Period (Live)' : 'Final Tenure Summary'}
+                  </div>
                 </div>
               </div>
 
@@ -357,7 +535,7 @@ export const PublicPortalPage: React.FC = () => {
                     {isActive ? 'Meals (To Today)' : 'Period Meals'}
                   </span>
                   <span className="text-lg sm:text-xl font-bold text-white block mt-0.5">
-                    {formatNumber(currentManager.totalMeals)}
+                    {formatNumber(displayManager.totalMeals)}
                   </span>
                   <span className="text-[10px] text-slate-500 block">Total counted meals</span>
                 </div>
@@ -366,7 +544,7 @@ export const PublicPortalPage: React.FC = () => {
                 <div className="bg-slate-950/50 rounded-xl p-3 border border-slate-800/80">
                   <span className="text-[11px] text-slate-400 font-medium block">Market Expenses</span>
                   <span className="text-lg sm:text-xl font-bold text-white block mt-0.5">
-                    {currencySymbol}{formatNumber(currentManager.totalMarketExpenses)}
+                    {currencySymbol}{formatNumber(displayManager.totalMarketExpenses)}
                   </span>
                   <span className="text-[10px] text-slate-500 block">Bazaar purchases</span>
                 </div>
@@ -377,7 +555,7 @@ export const PublicPortalPage: React.FC = () => {
                     {isActive ? 'Running Meal Rate' : 'Final Meal Rate'}
                   </span>
                   <span className="text-lg sm:text-xl font-bold text-emerald-300 block mt-0.5">
-                    {currencySymbol}{currentManager.mealRate.toFixed(2)}
+                    {currencySymbol}{displayManager.mealRate.toFixed(2)}
                     <span className="text-xs text-emerald-500/80 font-normal"> / meal</span>
                   </span>
                   <span className="text-[10px] text-emerald-400/80 block">Market ÷ Meals</span>
@@ -387,10 +565,10 @@ export const PublicPortalPage: React.FC = () => {
                 <div className="bg-amber-950/15 rounded-xl p-3 border border-amber-500/20">
                   <span className="text-[11px] text-amber-400 font-medium block">Manager Fee</span>
                   <span className="text-lg sm:text-xl font-bold text-amber-300 block mt-0.5">
-                    {currencySymbol}{formatNumber(currentManager.totalManagerFee)}
+                    {currencySymbol}{formatNumber(displayManager.totalManagerFee)}
                   </span>
                   <span className="text-[10px] text-amber-400/80 block">
-                    @{currencySymbol}{currentManager.managerFeePerMeal}/meal • Separate
+                    @{currencySymbol}{displayManager.managerFeePerMeal}/meal • Separate
                   </span>
                 </div>
               </div>
@@ -399,7 +577,7 @@ export const PublicPortalPage: React.FC = () => {
         })()}
 
         {/* =====================================================================
-            TOP METRIC STAT CARDS
+            TOP METRIC STAT CARDS (SCOPED TO SELECTED MANAGER)
            ===================================================================== */}
         {isLoading ? (
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 animate-pulse">
@@ -409,11 +587,11 @@ export const PublicPortalPage: React.FC = () => {
           </div>
         ) : monthData?.summary ? (
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-            {/* 1. Current Meal Rate */}
+            {/* 1. Meal Rate */}
             <div className="bg-gradient-to-br from-emerald-950/40 via-slate-900 to-slate-900 border border-emerald-500/30 rounded-2xl p-4 sm:p-5 relative overflow-hidden shadow-lg">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-semibold text-emerald-400 uppercase tracking-wider">
-                  Current Meal Rate
+                  {selectedManager ? (selectedManager.status === 'active' ? 'Running Meal Rate' : 'Tenure Meal Rate') : 'Current Meal Rate'}
                 </span>
                 <div className="w-7 h-7 rounded-lg bg-emerald-500/10 text-emerald-400 flex items-center justify-center">
                   <Utensils className="w-3.5 h-3.5" />
@@ -421,12 +599,12 @@ export const PublicPortalPage: React.FC = () => {
               </div>
               <div className="mt-2 flex items-baseline gap-1">
                 <span className="text-2xl sm:text-3xl font-black text-white tracking-tight">
-                  {formatCurrency(monthData.summary.mealRate, currency)}
+                  {formatCurrency(selectedManager ? selectedManager.mealRate : monthData.summary.mealRate, currency)}
                 </span>
                 <span className="text-xs text-slate-400">/ meal</span>
               </div>
               <p className="text-[11px] text-slate-400 mt-1">
-                Expenses ÷ Total Meals
+                {selectedManager ? `${selectedManager.managerName} • Market ÷ Meals` : 'Expenses ÷ Total Meals'}
               </p>
             </div>
 
@@ -434,7 +612,7 @@ export const PublicPortalPage: React.FC = () => {
             <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-                  Total Mess Meals
+                  {selectedManager ? 'Manager Period Meals' : 'Total Mess Meals'}
                 </span>
                 <div className="w-7 h-7 rounded-lg bg-blue-500/10 text-blue-400 flex items-center justify-center">
                   <Calendar className="w-3.5 h-3.5" />
@@ -442,14 +620,16 @@ export const PublicPortalPage: React.FC = () => {
               </div>
               <div className="mt-2 flex items-baseline gap-1">
                 <span className="text-2xl sm:text-3xl font-black text-white tracking-tight">
-                  {formatNumber(monthData.summary.totalMeals, 0)}
+                  {formatNumber(selectedManager ? selectedManager.totalMeals : monthData.summary.totalMeals, 0)}
                 </span>
                 <span className="text-xs text-slate-400">meals</span>
               </div>
               <p className="text-[11px] text-slate-400 mt-1">
-                {monthData.summary.fullOffDatesCount > 0
-                  ? `${monthData.summary.fullOffDatesCount} Full Off day(s)`
-                  : 'All calendar days active'}
+                {selectedManager
+                  ? `From ${selectedManager.assignmentDate} to ${selectedManager.status === 'active' ? 'Today' : (selectedManager.resignationDate || 'End')}`
+                  : (monthData.summary.fullOffDatesCount > 0
+                    ? `${monthData.summary.fullOffDatesCount} Full Off day(s)`
+                    : 'All calendar days active')}
               </p>
             </div>
 
@@ -457,7 +637,7 @@ export const PublicPortalPage: React.FC = () => {
             <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-                  Dining Expenses
+                  {selectedManager ? 'Manager Market Expenses' : 'Dining Expenses'}
                 </span>
                 <div className="w-7 h-7 rounded-lg bg-amber-500/10 text-amber-400 flex items-center justify-center">
                   <ShoppingCart className="w-3.5 h-3.5" />
@@ -465,11 +645,11 @@ export const PublicPortalPage: React.FC = () => {
               </div>
               <div className="mt-2 flex items-baseline gap-1">
                 <span className="text-2xl sm:text-3xl font-black text-white tracking-tight">
-                  {formatCurrency(monthData.summary.totalExpenses, currency)}
+                  {formatCurrency(selectedManager ? selectedManager.totalMarketExpenses : monthData.summary.totalExpenses, currency)}
                 </span>
               </div>
               <p className="text-[11px] text-slate-400 mt-1">
-                {monthData.expenses.length} recorded market item(s)
+                {selectedManager ? `Bazaar Purchases (${selectedManager.managerName})` : `${monthData.expenses.length} recorded market item(s)`}
               </p>
             </div>
 
@@ -656,6 +836,10 @@ export const PublicPortalPage: React.FC = () => {
                   {monthData.dailyMealSummaries.map((day) => {
                     const entry = monthData.memberDailyMeals[`${selectedMemberId}_${day.day}`];
                     const isFullOff = day.status === 'FULL_OFF';
+                    const isInsideTenure = selectedManager
+                      ? day.date >= selectedManager.assignmentDate &&
+                        day.date <= (selectedManager.status === 'active' ? todayStr : (selectedManager.resignationDate || todayStr))
+                      : true;
                     const count = entry?.count ?? 0;
                     const type = entry?.type ?? 'OFF';
 
@@ -663,7 +847,9 @@ export const PublicPortalPage: React.FC = () => {
                       <div
                         key={day.day}
                         className={`p-2 rounded-xl border text-center text-xs ${
-                          isFullOff
+                          !isInsideTenure
+                            ? 'bg-slate-900/40 border-slate-800/40 text-slate-600 opacity-60'
+                            : isFullOff
                             ? 'bg-rose-950/20 border-rose-900/40 text-rose-300'
                             : count === 1
                             ? 'bg-emerald-950/30 border-emerald-800/40 text-emerald-300'
@@ -674,10 +860,10 @@ export const PublicPortalPage: React.FC = () => {
                       >
                         <div className="text-[10px] text-slate-400 font-mono">Day {day.day}</div>
                         <div className="font-extrabold text-sm mt-0.5">
-                          {isFullOff ? 'OFF' : count > 0 ? count : '-'}
+                          {!isInsideTenure ? '—' : isFullOff ? 'OFF' : count > 0 ? count : '-'}
                         </div>
                         <div className="text-[9px] uppercase tracking-wider mt-0.5 font-semibold">
-                          {isFullOff ? 'CLOSURE' : type}
+                          {!isInsideTenure ? 'OTHER MGR' : isFullOff ? 'CLOSURE' : type}
                         </div>
                       </div>
                     );
@@ -690,9 +876,18 @@ export const PublicPortalPage: React.FC = () => {
             <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
               <div className="p-4 sm:p-5 border-b border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
-                  <h3 className="text-base font-bold text-white">Daily Dining Attendance Table</h3>
-                  <p className="text-xs text-slate-400">
-                    Day-by-day mess meal counts, active statuses, and closures for {formatMonthName(selectedMonth)}.
+                  <h3 className="text-base font-bold text-white flex items-center gap-2">
+                    <span>Daily Dining Attendance Table</span>
+                    {selectedManager && (
+                      <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                        {selectedManager.managerName}'s Tenure
+                      </span>
+                    )}
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    {selectedManager
+                      ? `Showing attendance records from ${selectedManager.assignmentDate} to ${selectedManager.status === 'active' ? 'Today' : (selectedManager.resignationDate || 'End')} within ${formatMonthName(selectedMonth)}.`
+                      : `Day-by-day mess meal counts, active statuses, and closures for ${formatMonthName(selectedMonth)}.`}
                   </p>
                 </div>
                 <div className="flex items-center gap-3 text-xs text-slate-400">
@@ -708,88 +903,106 @@ export const PublicPortalPage: React.FC = () => {
                 </div>
               </div>
 
-              <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse text-xs sm:text-sm">
-                  <thead>
-                    <tr className="bg-slate-800/50 text-slate-400 border-b border-slate-800 font-semibold">
-                      <th className="py-3 px-4">Date</th>
-                      <th className="py-3 px-4">Day</th>
-                      <th className="py-3 px-4">Dining Status</th>
-                      <th className="py-3 px-4 text-center">ON (1)</th>
-                      <th className="py-3 px-4 text-center">Double (2)</th>
-                      <th className="py-3 px-4 text-center">OFF (0)</th>
-                      <th className="py-3 px-4 text-right font-bold text-slate-200">Total Meals</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-800/60 font-mono">
-                    {monthData.dailyMealSummaries.map((day) => {
-                      const dateObj = new Date(day.date);
-                      const dayName = dateObj.toLocaleDateString('en-US', { weekday: 'short' });
-                      const isFullOff = day.status === 'FULL_OFF';
+              {displayedDailyMealSummaries.length === 0 ? (
+                <div className="p-8 text-center space-y-3">
+                  <p className="text-xs text-slate-400">
+                    No attendance records for {selectedManager?.managerName} in {formatMonthName(selectedMonth)}.
+                  </p>
+                  {selectedManager && (
+                    <button
+                      onClick={() => handleMonthChange(selectedManager.assignmentDate.slice(0, 7))}
+                      className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-emerald-600/20 text-emerald-300 border border-emerald-500/30 hover:bg-emerald-600/30"
+                    >
+                      Go to {formatMonthName(selectedManager.assignmentDate.slice(0, 7))} →
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse text-xs sm:text-sm">
+                    <thead>
+                      <tr className="bg-slate-800/50 text-slate-400 border-b border-slate-800 font-semibold">
+                        <th className="py-3 px-4">Date</th>
+                        <th className="py-3 px-4">Day</th>
+                        <th className="py-3 px-4">Dining Status</th>
+                        <th className="py-3 px-4 text-center">ON (1)</th>
+                        <th className="py-3 px-4 text-center">Double (2)</th>
+                        <th className="py-3 px-4 text-center">OFF (0)</th>
+                        <th className="py-3 px-4 text-right font-bold text-slate-200">Total Meals</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800/60 font-mono">
+                      {displayedDailyMealSummaries.map((day) => {
+                        const dateObj = new Date(day.date);
+                        const dayName = dateObj.toLocaleDateString('en-US', { weekday: 'short' });
+                        const isFullOff = day.status === 'FULL_OFF';
 
-                      return (
-                        <tr
-                          key={day.day}
-                          className={`hover:bg-slate-800/30 transition-colors ${
-                            isFullOff ? 'bg-rose-950/10' : ''
-                          }`}
-                        >
-                          <td className="py-3 px-4 font-sans text-slate-200 font-medium">
-                            {formatDate(day.date)}
-                          </td>
-                          <td className="py-3 px-4 font-sans text-slate-400">
-                            {dayName} (Day {day.day})
-                          </td>
-                          <td className="py-3 px-4 font-sans">
-                            {isFullOff ? (
-                              <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold bg-rose-500/20 text-rose-400 border border-rose-500/30">
-                                FULL MEAL OFF {day.closureReason ? `(${day.closureReason})` : ''}
+                        return (
+                          <tr
+                            key={day.day}
+                            className={`hover:bg-slate-800/30 transition-colors ${
+                              isFullOff ? 'bg-rose-950/10' : ''
+                            }`}
+                          >
+                            <td className="py-3 px-4 font-sans text-slate-200 font-medium">
+                              {formatDate(day.date)}
+                            </td>
+                            <td className="py-3 px-4 font-sans text-slate-400">
+                              {dayName} (Day {day.day})
+                            </td>
+                            <td className="py-3 px-4 font-sans">
+                              {isFullOff ? (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold bg-rose-500/20 text-rose-400 border border-rose-500/30">
+                                  FULL MEAL OFF {day.closureReason ? `(${day.closureReason})` : ''}
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                                  NORMAL
+                                </span>
+                              )}
+                            </td>
+                            <td className="py-3 px-4 text-center text-emerald-400">
+                              {isFullOff ? '0' : day.onCount}
+                            </td>
+                            <td className="py-3 px-4 text-center text-blue-400">
+                              {isFullOff ? '0' : day.doubleCount}
+                            </td>
+                            <td className="py-3 px-4 text-center text-slate-400">
+                              {day.offCount}
+                            </td>
+                            <td className="py-3 px-4 text-right font-bold text-white">
+                              <span className="px-2.5 py-1 rounded-lg bg-slate-800 border border-slate-700">
+                                {day.totalMeals}
                               </span>
-                            ) : (
-                              <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                                NORMAL
-                              </span>
-                            )}
-                          </td>
-                          <td className="py-3 px-4 text-center text-emerald-400">
-                            {isFullOff ? '0' : day.onCount}
-                          </td>
-                          <td className="py-3 px-4 text-center text-blue-400">
-                            {isFullOff ? '0' : day.doubleCount}
-                          </td>
-                          <td className="py-3 px-4 text-center text-slate-400">
-                            {day.offCount}
-                          </td>
-                          <td className="py-3 px-4 text-right font-bold text-white">
-                            <span className="px-2.5 py-1 rounded-lg bg-slate-800 border border-slate-700">
-                              {day.totalMeals}
-                            </span>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                  <tfoot>
-                    <tr className="bg-slate-800/80 font-bold text-white border-t border-slate-700">
-                      <td colSpan={3} className="py-3 px-4 font-sans">
-                        Month Total ({monthData.summary.daysInMonth} Days)
-                      </td>
-                      <td className="py-3 px-4 text-center text-emerald-400 font-mono">
-                        {monthData.dailyMealSummaries.reduce((s, d) => s + (d.status === 'FULL_OFF' ? 0 : d.onCount), 0)}
-                      </td>
-                      <td className="py-3 px-4 text-center text-blue-400 font-mono">
-                        {monthData.dailyMealSummaries.reduce((s, d) => s + (d.status === 'FULL_OFF' ? 0 : d.doubleCount), 0)}
-                      </td>
-                      <td className="py-3 px-4 text-center text-slate-400 font-mono">
-                        {monthData.dailyMealSummaries.reduce((s, d) => s + d.offCount, 0)}
-                      </td>
-                      <td className="py-3 px-4 text-right text-emerald-300 font-mono text-base">
-                        {monthData.summary.totalMeals} meals
-                      </td>
-                    </tr>
-                  </tfoot>
-                </table>
-              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                    <tfoot>
+                      <tr className="bg-slate-800/80 font-bold text-white border-t border-slate-700">
+                        <td colSpan={3} className="py-3 px-4 font-sans">
+                          {selectedManager
+                            ? `${selectedManager.managerName} Period Total (${displayedDailyMealSummaries.length} Days in ${formatMonthName(selectedMonth)})`
+                            : `Month Total (${monthData.summary.daysInMonth} Days)`}
+                        </td>
+                        <td className="py-3 px-4 text-center text-emerald-400 font-mono">
+                          {displayedDailyMealSummaries.reduce((s, d) => s + (d.status === 'FULL_OFF' ? 0 : d.onCount), 0)}
+                        </td>
+                        <td className="py-3 px-4 text-center text-blue-400 font-mono">
+                          {displayedDailyMealSummaries.reduce((s, d) => s + (d.status === 'FULL_OFF' ? 0 : d.doubleCount), 0)}
+                        </td>
+                        <td className="py-3 px-4 text-center text-slate-400 font-mono">
+                          {displayedDailyMealSummaries.reduce((s, d) => s + d.offCount, 0)}
+                        </td>
+                        <td className="py-3 px-4 text-right text-emerald-300 font-mono text-base">
+                          {displayedDailyMealSummaries.reduce((s, d) => s + d.totalMeals, 0)} meals
+                        </td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -831,6 +1044,14 @@ export const PublicPortalPage: React.FC = () => {
 
             {/* Expenses List / Table */}
             <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
+              {selectedManager && (
+                <div className="px-4 py-2.5 bg-slate-800/40 border-b border-slate-800 flex items-center justify-between text-xs text-slate-300">
+                  <span>
+                    Scoped to <strong>{selectedManager.managerName}</strong>'s tenure ({selectedManager.assignmentDate} → {selectedManager.status === 'active' ? 'Today' : (selectedManager.resignationDate || 'End')})
+                  </span>
+                  <span className="text-emerald-400 font-semibold">{filteredExpenses.length} expense(s) found</span>
+                </div>
+              )}
               <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse text-xs sm:text-sm">
                   <thead>
@@ -846,7 +1067,7 @@ export const PublicPortalPage: React.FC = () => {
                     {filteredExpenses.length === 0 ? (
                       <tr>
                         <td colSpan={5} className="py-8 text-center text-slate-500 text-xs">
-                          No expenses matching filter criteria.
+                          No expenses matching filter criteria in this tenure.
                         </td>
                       </tr>
                     ) : (
@@ -876,7 +1097,7 @@ export const PublicPortalPage: React.FC = () => {
                   <tfoot>
                     <tr className="bg-slate-800/80 font-bold text-white border-t border-slate-700">
                       <td colSpan={4} className="py-3 px-4">
-                        Total Filtered Dining Expenses ({filteredExpenses.length} items)
+                        {selectedManager ? `${selectedManager.managerName}'s Filtered Expenses (${filteredExpenses.length} items)` : `Total Filtered Dining Expenses (${filteredExpenses.length} items)`}
                       </td>
                       <td className="py-3 px-4 text-right text-emerald-300 font-mono text-base">
                         {formatCurrency(
@@ -916,6 +1137,11 @@ export const PublicPortalPage: React.FC = () => {
 
             {/* Members Table */}
             <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
+              {selectedManager && (
+                <div className="px-4 py-2.5 bg-slate-800/40 border-b border-slate-800 text-xs text-slate-300">
+                  Showing member meal counts during <strong>{selectedManager.managerName}</strong>'s tenure ({selectedManager.assignmentDate} → {selectedManager.status === 'active' ? 'Today' : (selectedManager.resignationDate || 'End')}) in {formatMonthName(selectedMonth)}.
+                </div>
+              )}
               <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse text-xs sm:text-sm">
                   <thead>
@@ -924,7 +1150,9 @@ export const PublicPortalPage: React.FC = () => {
                       <th className="py-3 px-4">Member Name</th>
                       <th className="py-3 px-4">Room & Floor</th>
                       <th className="py-3 px-4">Status</th>
-                      <th className="py-3 px-4 text-center font-bold text-slate-200">Total Month Meals</th>
+                      <th className="py-3 px-4 text-center font-bold text-slate-200">
+                        {selectedManager ? `${selectedManager.managerName}'s Meals` : 'Total Month Meals'}
+                      </th>
                       <th className="py-3 px-4 text-right">Actions</th>
                     </tr>
                   </thead>
@@ -936,43 +1164,49 @@ export const PublicPortalPage: React.FC = () => {
                         </td>
                       </tr>
                     ) : (
-                      filteredMembers.map((member, idx) => (
-                        <tr key={member.id} className="hover:bg-slate-800/30 transition-colors">
-                          <td className="py-3 px-4 font-mono text-slate-500">{idx + 1}</td>
-                          <td className="py-3 px-4 font-bold text-white">{member.name}</td>
-                          <td className="py-3 px-4 text-slate-300">
-                            {member.room} {member.floor ? `(${member.floor})` : ''}
-                          </td>
-                          <td className="py-3 px-4">
-                            <span
-                              className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold ${
-                                member.status === 'Active'
-                                  ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
-                                  : 'bg-slate-700 text-slate-400'
-                              }`}
-                            >
-                              {member.status}
-                            </span>
-                          </td>
-                          <td className="py-3 px-4 text-center font-mono font-bold text-emerald-400">
-                            <span className="px-2.5 py-1 rounded-lg bg-emerald-950/40 border border-emerald-800/40">
-                              {member.totalMeals} meals
-                            </span>
-                          </td>
-                          <td className="py-3 px-4 text-right">
-                            <button
-                              onClick={() => {
-                                setSelectedMemberId(member.id);
-                                window.scrollTo({ top: 300, behavior: 'smooth' });
-                              }}
-                              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-colors"
-                            >
-                              <span>Daily Breakdown</span>
-                              <ChevronRight className="w-3 h-3 text-slate-400" />
-                            </button>
-                          </td>
-                        </tr>
-                      ))
+                      filteredMembers.map((member, idx) => {
+                        const memberMealsCount = selectedManager
+                          ? (memberPeriodMealsMap.get(member.id) ?? 0)
+                          : member.totalMeals;
+
+                        return (
+                          <tr key={member.id} className="hover:bg-slate-800/30 transition-colors">
+                            <td className="py-3 px-4 font-mono text-slate-500">{idx + 1}</td>
+                            <td className="py-3 px-4 font-bold text-white">{member.name}</td>
+                            <td className="py-3 px-4 text-slate-300">
+                              {member.room} {member.floor ? `(${member.floor})` : ''}
+                            </td>
+                            <td className="py-3 px-4">
+                              <span
+                                className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold ${
+                                  member.status === 'Active'
+                                    ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
+                                    : 'bg-slate-700 text-slate-400'
+                                }`}
+                              >
+                                {member.status}
+                              </span>
+                            </td>
+                            <td className="py-3 px-4 text-center font-mono font-bold text-emerald-400">
+                              <span className="px-2.5 py-1 rounded-lg bg-emerald-950/40 border border-emerald-800/40">
+                                {memberMealsCount} meals
+                              </span>
+                            </td>
+                            <td className="py-3 px-4 text-right">
+                              <button
+                                onClick={() => {
+                                  setSelectedMemberId(member.id);
+                                  window.scrollTo({ top: 300, behavior: 'smooth' });
+                                }}
+                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-colors"
+                              >
+                                <span>Daily Breakdown</span>
+                                <ChevronRight className="w-3 h-3 text-slate-400" />
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })
                     )}
                   </tbody>
                 </table>
@@ -988,43 +1222,88 @@ export const PublicPortalPage: React.FC = () => {
             <div className="bg-gradient-to-r from-slate-900 via-slate-850 to-slate-900 border border-emerald-500/30 rounded-3xl p-6 sm:p-8 space-y-4">
               <div className="flex items-center gap-2 text-xs font-bold text-emerald-400 uppercase tracking-widest">
                 <HelpCircle className="w-4 h-4" />
-                <span>Mess Dining Calculation Rule</span>
+                <span>
+                  {selectedManager
+                    ? `${selectedManager.managerName}'s Assignment Calculation Rule`
+                    : 'Mess Dining Calculation Rule'}
+                </span>
               </div>
               <h3 className="text-xl sm:text-2xl font-black text-white">
-                How is the Mess Meal Rate Calculated?
+                {selectedManager
+                  ? `How is ${selectedManager.managerName}'s Meal Rate Calculated?`
+                  : 'How is the Mess Meal Rate Calculated?'}
               </h3>
               <p className="text-xs sm:text-sm text-slate-300 leading-relaxed max-w-2xl">
-                The meal rate is determined strictly by dividing the eligible mess dining & bazaar expenses by the total number of meals served in the month across all resident members:
+                The meal rate is determined strictly by dividing the eligible bazaar/market purchases by the total number of meals served across all resident members during this assignment period:
               </p>
 
               {/* Formula visualization */}
               <div className="bg-slate-950/70 border border-slate-800 rounded-2xl p-4 sm:p-6 flex flex-col md:flex-row items-center justify-center gap-4 text-center">
                 <div className="space-y-1">
-                  <span className="text-xs text-slate-400 font-semibold uppercase">Total Dining Expenses</span>
+                  <span className="text-xs text-slate-400 font-semibold uppercase">
+                    {selectedManager ? 'Market Expenses' : 'Total Dining Expenses'}
+                  </span>
                   <div className="text-xl sm:text-2xl font-black text-amber-400 font-mono">
-                    {formatCurrency(monthData.summary.totalExpenses, currency)}
+                    {formatCurrency(
+                      selectedManager ? selectedManager.totalMarketExpenses : monthData.summary.totalExpenses,
+                      currency
+                    )}
                   </div>
                 </div>
 
                 <div className="text-2xl font-black text-emerald-400 font-mono px-2">÷</div>
 
                 <div className="space-y-1">
-                  <span className="text-xs text-slate-400 font-semibold uppercase">Total Effective Meals</span>
+                  <span className="text-xs text-slate-400 font-semibold uppercase">
+                    {selectedManager ? 'Assignment Meals' : 'Total Effective Meals'}
+                  </span>
                   <div className="text-xl sm:text-2xl font-black text-blue-400 font-mono">
-                    {formatNumber(monthData.summary.totalMeals, 0)} meals
+                    {formatNumber(
+                      selectedManager ? selectedManager.totalMeals : monthData.summary.totalMeals,
+                      0
+                    )} meals
                   </div>
                 </div>
 
                 <div className="text-2xl font-black text-emerald-400 font-mono px-2">=</div>
 
                 <div className="space-y-1 bg-emerald-950/40 border border-emerald-500/40 rounded-xl px-5 py-2">
-                  <span className="text-xs text-emerald-400 font-semibold uppercase">Monthly Meal Rate</span>
+                  <span className="text-xs text-emerald-400 font-semibold uppercase">
+                    {selectedManager
+                      ? `${selectedManager.status === 'active' ? 'Running' : 'Tenure'} Meal Rate`
+                      : 'Monthly Meal Rate'}
+                  </span>
                   <div className="text-2xl sm:text-3xl font-black text-white font-mono">
-                    {formatCurrency(monthData.summary.mealRate, currency)}
+                    {formatCurrency(
+                      selectedManager ? selectedManager.mealRate : monthData.summary.mealRate,
+                      currency
+                    )}
                     <span className="text-xs text-slate-400 font-sans ml-1">/ meal</span>
                   </div>
                 </div>
               </div>
+
+              {/* Manager Fee Transparency Box (When Manager is Selected) */}
+              {selectedManager && (
+                <div className="bg-amber-950/20 border border-amber-500/30 rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mt-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0">
+                      <UserCheck className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <span className="font-bold text-white text-sm">
+                        Manager Fee ({selectedManager.managerName}): {currency}{formatNumber(selectedManager.totalManagerFee)}
+                      </span>
+                      <p className="text-xs text-amber-300 mt-0.5">
+                        Calculated as {formatNumber(selectedManager.totalMeals, 0)} meals × {currency}{selectedManager.managerFeePerMeal}/meal.
+                      </p>
+                    </div>
+                  </div>
+                  <span className="text-[11px] font-semibold px-2.5 py-1 rounded-lg bg-amber-950/40 text-amber-400 border border-amber-500/30">
+                    Separate from Meal Rate
+                  </span>
+                </div>
+              )}
             </div>
 
             {/* Closures & Full Off Log */}

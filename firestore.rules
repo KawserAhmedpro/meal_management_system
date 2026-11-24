@@ -40,7 +40,8 @@ service cloud.firestore {
         'activeMonth',
         'availableMonths',
         'lastPublishedAt',
-        'currentManager'
+        'currentManager',
+        'availableManagers'
       ]);
 
       let validCurrentManager = !('currentManager' in data) ||
@@ -48,6 +49,7 @@ service cloud.firestore {
         (
           data.currentManager is map &&
           data.currentManager.keys().hasOnly([
+            'id',
             'managerName',
             'assignmentDate',
             'status',
@@ -73,7 +75,11 @@ service cloud.firestore {
           )
         );
 
-      return hasAllowedKeys && validCurrentManager;
+      let validAvailableManagers = !('availableManagers' in data) ||
+        data.availableManagers == null ||
+        data.availableManagers is list;
+
+      return hasAllowedKeys && validCurrentManager && validAvailableManagers;
     }
 
     // Strict field allowlist for public_portal/{monthId}

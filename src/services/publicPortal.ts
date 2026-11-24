@@ -259,6 +259,7 @@ export function buildPublicCurrentManagerSummary(
   const status: 'active' | 'resigned' = isResigned ? 'resigned' : 'active';
 
   const summary: PublicCurrentManagerSummary = {
+    id: manager.id,
     managerName: calc.managerName,
     assignmentDate: calc.startDate,
     status,
@@ -274,6 +275,61 @@ export function buildPublicCurrentManagerSummary(
   }
 
   return summary;
+}
+
+/**
+ * Builds the list of all authoritative public Manager Assignment Period Summaries
+ * (Active, Resigned, and Historical managers) for /public_portal/meta.
+ * Strictly limited to operational metrics, preserving calculation consistency.
+ */
+export function buildPublicAllManagersSummary(
+  managers: ManagerPeriod[],
+  mealEntries: MealEntry[],
+  expenses: Expense[],
+  dailyClosures: DailyMealClosure[] = [],
+  feeRatePerMeal: number = 5,
+  referenceDate?: string
+): PublicCurrentManagerSummary[] {
+  if (!managers || managers.length === 0) return [];
+
+  // Sort managers chronologically (Active first, then latest startDate desc)
+  const sorted = [...managers].sort((a, b) => {
+    if (a.status === 'Active' && b.status !== 'Active') return -1;
+    if (b.status === 'Active' && a.status !== 'Active') return 1;
+    return (b.startDate || '').localeCompare(a.startDate || '');
+  });
+
+  return sorted.map((manager) => {
+    const calc = calculateManagerAssignmentPeriodAccounting(
+      manager,
+      mealEntries,
+      expenses,
+      dailyClosures,
+      feeRatePerMeal,
+      referenceDate
+    );
+
+    const isResigned = manager.status === 'Resigned' || (Boolean(manager.endDate) && manager.status !== 'Active');
+    const status: 'active' | 'resigned' = isResigned ? 'resigned' : 'active';
+
+    const item: PublicCurrentManagerSummary = {
+      id: manager.id,
+      managerName: calc.managerName,
+      assignmentDate: calc.startDate,
+      status,
+      totalMeals: calc.totalMeals,
+      totalMarketExpenses: calc.totalMarketExpenses,
+      mealRate: calc.mealRate,
+      managerFeePerMeal: calc.feeRatePerMeal,
+      totalManagerFee: calc.totalManagerFee,
+    };
+
+    if (isResigned && manager.endDate) {
+      item.resignationDate = manager.endDate;
+    }
+
+    return item;
+  });
 }
 
 /**

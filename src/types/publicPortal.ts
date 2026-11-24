@@ -5,6 +5,7 @@ import { MealStatus } from './index';
  * Strictly limited to operational metadata without personal or private member info.
  */
 export interface PublicCurrentManagerSummary {
+  id?: string;
   managerName: string;
   assignmentDate: string; // YYYY-MM-DD
   status: 'active' | 'resigned';
@@ -28,6 +29,7 @@ export interface PublicPortalMeta {
   availableMonths: string[]; // e.g. ["2026-03", "2026-02"]
   lastPublishedAt: number; // unix timestamp
   currentManager?: PublicCurrentManagerSummary | null;
+  availableManagers?: PublicCurrentManagerSummary[];
 }
 
 export interface PublicMemberInfo {

@@ -35,6 +35,7 @@ import {
   publishPublicPortalMeta,
   getPublicPortalUrl,
   buildPublicCurrentManagerSummary,
+  buildPublicAllManagersSummary,
 } from '../services/publicPortal';
 
 export interface DataContextType {
@@ -532,8 +533,15 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       for (const e of expenses) if (e.month) allMonthsSet.add(e.month);
       const availableMonths = Array.from(allMonthsSet).sort().reverse();
 
-      // 4. Compute single authoritative public Manager Assignment Period Summary
+      // 4. Compute single authoritative public Manager Assignment Period Summary & All Managers
       const currentManagerSummary = buildPublicCurrentManagerSummary(
+        dexieManagers,
+        dexieMealEntries,
+        dexieExpenses,
+        dexieClosures,
+        settings.managerFeePerMeal || 5
+      );
+      const availableManagers = buildPublicAllManagersSummary(
         dexieManagers,
         dexieMealEntries,
         dexieExpenses,
@@ -551,6 +559,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         availableMonths,
         lastPublishedAt: Date.now(),
         currentManager: currentManagerSummary,
+        availableManagers,
       });
 
       setLastPublicSyncedAt(new Date());
@@ -592,6 +601,27 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         count++;
       }
 
+      // Compute authoritative managers from Dexie
+      const dexieManagers = await db.managers.toArray();
+      const dexieMealEntries = await db.mealEntries.toArray();
+      const dexieExpenses = await db.expenses.toArray();
+      const dexieClosures = await db.dailyClosures.toArray();
+
+      const currentManagerSummary = buildPublicCurrentManagerSummary(
+        dexieManagers,
+        dexieMealEntries,
+        dexieExpenses,
+        dexieClosures,
+        settings.managerFeePerMeal || 5
+      );
+      const availableManagers = buildPublicAllManagersSummary(
+        dexieManagers,
+        dexieMealEntries,
+        dexieExpenses,
+        dexieClosures,
+        settings.managerFeePerMeal || 5
+      );
+
       await publishPublicPortalMeta({
         messName: settings.messName || 'DINING MANAGEMENT SYSTEM',
         institutionName: settings.institutionName || '',
@@ -601,6 +631,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         availableMonths: monthsList.sort().reverse(),
         lastPublishedAt: Date.now(),
         currentManager: currentManagerSummary,
+        availableManagers,
       });
 
       setLastPublicSyncedAt(new Date());
