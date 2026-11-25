@@ -3,6 +3,7 @@ import { Modal } from '../../components/ui/Modal';
 import { Button } from '../../components/ui/Button';
 import { Member, MealStatus } from '../../types';
 import { db } from '../../db';
+import { useApp } from '../../context/AppContext';
 
 interface BulkMealModalProps {
   isOpen: boolean;
@@ -19,6 +20,7 @@ export const BulkMealModal: React.FC<BulkMealModalProps> = ({
   members,
   onSuccess,
 }) => {
+  const { saveMealEntriesBulk } = useApp();
   const [selectedFloor, setSelectedFloor] = useState('ALL');
   const [targetStatus, setTargetStatus] = useState<MealStatus>('ON');
   const [isApplying, setIsApplying] = useState(false);
@@ -44,7 +46,7 @@ export const BulkMealModal: React.FC<BulkMealModalProps> = ({
       updatedAt: Date.now(),
     }));
 
-    await db.mealEntries.bulkPut(entriesToPut);
+    await saveMealEntriesBulk(entriesToPut);
     setIsApplying(false);
     onClose();
     if (onSuccess) onSuccess();

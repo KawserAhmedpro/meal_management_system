@@ -32,7 +32,7 @@ export const DepositModal: React.FC<DepositModalProps> = ({
   defaultMemberId,
   onSuccess,
 }) => {
-  const { selectedMonth } = useApp();
+  const { selectedMonth, saveDeposit } = useApp();
   const members = useLiveQuery(() => db.members.orderBy('room').toArray(), []) || [];
   const [memberSearch, setMemberSearch] = useState('');
 
@@ -92,7 +92,8 @@ export const DepositModal: React.FC<DepositModalProps> = ({
     const amount = Number(data.amount);
 
     if (depositToEdit) {
-      await db.deposits.update(depositToEdit.id, {
+      await saveDeposit({
+        ...depositToEdit,
         memberId: member.id,
         memberName: member.name,
         room: member.room,
@@ -104,7 +105,7 @@ export const DepositModal: React.FC<DepositModalProps> = ({
       });
     } else {
       const newId = `DEP-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
-      await db.deposits.add({
+      await saveDeposit({
         id: newId,
         memberId: member.id,
         memberName: member.name,

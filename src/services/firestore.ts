@@ -40,7 +40,8 @@ export type SyncState =
   | 'ONLINE_SYNCING'
   | 'OFFLINE_WORKING'
   | 'SYNC_ERROR'
-  | 'LOCAL_ONLY';
+  | 'LOCAL_ONLY'
+  | 'SYNC_CONFLICT';
 
 // Generic helper to get a typed collection
 export function getCollectionRef<T = DocumentData>(collectionName: string): CollectionReference<T> | null {

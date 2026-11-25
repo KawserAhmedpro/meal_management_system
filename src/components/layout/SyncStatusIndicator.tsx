@@ -35,6 +35,14 @@ export const SyncStatusIndicator: React.FC = () => {
           icon: <CloudOff className="w-3.5 h-3.5 text-amber-600" />,
           description: 'Working offline. Edits are saved locally and will sync when internet returns.',
         };
+      case 'SYNC_CONFLICT':
+        return {
+          label: 'Version Conflict',
+          dotClass: 'bg-purple-500 animate-pulse',
+          badgeClass: 'bg-purple-50 text-purple-800 border-purple-200',
+          icon: <AlertCircle className="w-3.5 h-3.5 text-purple-600" />,
+          description: 'A version conflict was detected and quarantined safely for administrator review.',
+        };
       case 'SYNC_ERROR':
         return {
           label: 'Sync Issue',

@@ -152,3 +152,6 @@ export interface MonthFinancialOverview {
   fullOffDatesCount: number;
   managerCalculations: ManagerFeeCalculation[];
 }
+
+export * from './sync';
+

@@ -5,7 +5,7 @@ import { Input } from '../../components/ui/Input';
 import { Select } from '../../components/ui/Select';
 import { Button } from '../../components/ui/Button';
 import { Member } from '../../types';
-import { db } from '../../db';
+import { useApp } from '../../context/AppContext';
 
 interface MemberModalProps {
   isOpen: boolean;
@@ -30,6 +30,7 @@ export const MemberModal: React.FC<MemberModalProps> = ({
   memberToEdit,
   onSuccess,
 }) => {
+  const { saveMember, createMember } = useApp();
   const {
     register,
     handleSubmit,
@@ -74,23 +75,26 @@ export const MemberModal: React.FC<MemberModalProps> = ({
 
   const onSubmit = async (data: FormValues) => {
     const now = Date.now();
-    if (memberToEdit) {
-      await db.members.update(memberToEdit.id, {
-        ...data,
-        updatedAt: now,
-      });
-    } else {
-      const count = await db.members.count();
-      const newId = `MEM-${String(count + 1).padStart(3, '0')}`;
-      await db.members.add({
-        id: newId,
-        ...data,
-        createdAt: now,
-        updatedAt: now,
-      });
+    try {
+      if (memberToEdit) {
+        await saveMember({
+          ...memberToEdit,
+          ...data,
+          updatedAt: now,
+        });
+      } else {
+        await createMember({
+          ...data,
+          createdAt: now,
+          updatedAt: now,
+        });
+      }
+      onClose();
+      if (onSuccess) onSuccess();
+    } catch (err: any) {
+      console.error('[MemberModal] Save member error:', err);
+      alert(err.message || 'Failed to save member.');
     }
-    onClose();
-    if (onSuccess) onSuccess();
   };
 
   const floorOptions = [

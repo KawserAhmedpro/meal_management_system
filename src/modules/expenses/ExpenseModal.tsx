@@ -30,7 +30,7 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
   expenseToEdit,
   onSuccess,
 }) => {
-  const { selectedMonth } = useApp();
+  const { selectedMonth, saveExpense, saveCategory } = useApp();
   const categories = useLiveQuery(() => db.categories.toArray(), []) || [];
   const [customCategory, setCustomCategory] = useState('');
   const [isAddingCategory, setIsAddingCategory] = useState(false);
@@ -86,7 +86,7 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
       name: catName,
       isDefault: false,
     };
-    await db.categories.add(newCat);
+    await saveCategory(newCat);
     setValue('category', catName);
     setCustomCategory('');
     setIsAddingCategory(false);
@@ -97,7 +97,8 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
     const amount = Number(data.amount);
 
     if (expenseToEdit) {
-      await db.expenses.update(expenseToEdit.id, {
+      await saveExpense({
+        ...expenseToEdit,
         date: data.date,
         month,
         title: data.title,
@@ -107,7 +108,7 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
       });
     } else {
       const newId = `EXP-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
-      await db.expenses.add({
+      await saveExpense({
         id: newId,
         date: data.date,
         month,

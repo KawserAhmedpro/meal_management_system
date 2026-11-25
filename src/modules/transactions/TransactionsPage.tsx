@@ -28,7 +28,7 @@ import {
 } from 'lucide-react';
 
 export const TransactionsPage: React.FC = () => {
-  const { selectedMonth, settings } = useApp();
+  const { selectedMonth, settings, deleteDeposit } = useApp();
   const [activeTab, setActiveTab] = useState<'sheet' | 'ledger'>('sheet');
 
   // Queries
@@ -115,7 +115,7 @@ export const TransactionsPage: React.FC = () => {
 
   const handleDeleteDepositConfirm = async () => {
     if (!depositToDelete) return;
-    await db.deposits.delete(depositToDelete.id);
+    await deleteDeposit(depositToDelete.id);
     setDepositToDelete(null);
   };
 

@@ -27,7 +27,6 @@ import {
   Globe,
   RefreshCw,
 } from 'lucide-react';
-import { db } from '../../db';
 import { DEFAULT_SETTINGS } from '../../db/seedData';
 import { formatMonthName } from '../../utils/formatters';
 
@@ -172,7 +171,7 @@ export const SettingsPage: React.FC = () => {
 
   const handleResetDefaults = async () => {
     if (confirm('Reset system settings back to original defaults?')) {
-      await db.settings.put(DEFAULT_SETTINGS);
+      await updateSettings(DEFAULT_SETTINGS);
       reset({
         ...DEFAULT_SETTINGS,
       });

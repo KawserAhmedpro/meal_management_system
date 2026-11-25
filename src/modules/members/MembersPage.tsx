@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db';
+import { useApp } from '../../context/AppContext';
 import { Member } from '../../types';
 import { MemberModal } from './MemberModal';
 import { MemberProfileModal } from './MemberProfileModal';
@@ -24,6 +25,7 @@ import {
 } from 'lucide-react';
 
 export const MembersPage: React.FC = () => {
+  const { saveMember, deleteMember } = useApp();
   const members = useLiveQuery(() => db.members.toArray(), []) || [];
 
   // Filter & Search states
@@ -75,7 +77,8 @@ export const MembersPage: React.FC = () => {
 
   const toggleStatus = async (member: Member) => {
     const newStatus = member.status === 'Active' ? 'Inactive' : 'Active';
-    await db.members.update(member.id, {
+    await saveMember({
+      ...member,
       status: newStatus,
       updatedAt: Date.now(),
     });
@@ -83,11 +86,7 @@ export const MembersPage: React.FC = () => {
 
   const handleDeleteConfirm = async () => {
     if (!memberToDelete) return;
-    await db.transaction('rw', [db.members, db.mealEntries, db.deposits], async () => {
-      await db.members.delete(memberToDelete.id);
-      await db.mealEntries.where('memberId').equals(memberToDelete.id).delete();
-      await db.deposits.where('memberId').equals(memberToDelete.id).delete();
-    });
+    await deleteMember(memberToDelete.id);
     setMemberToDelete(null);
   };
 

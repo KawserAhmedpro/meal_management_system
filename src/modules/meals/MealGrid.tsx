@@ -2,6 +2,7 @@ import React, { useMemo } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { Member, MealEntry, MealStatus, DailyMealClosure } from '../../types';
 import { db } from '../../db';
+import { useApp } from '../../context/AppContext';
 import { CalendarOff, AlertTriangle } from 'lucide-react';
 
 interface MealGridProps {
@@ -17,6 +18,7 @@ export const MealGrid: React.FC<MealGridProps> = ({
   selectedMonth,
   searchFilter,
 }) => {
+  const { saveMealEntry } = useApp();
   // Days in selected month (28, 29, 30, or 31)
   const [yearStr, monthStr] = selectedMonth.split('-');
   const year = parseInt(yearStr);
@@ -97,7 +99,7 @@ export const MealGrid: React.FC<MealGridProps> = ({
       nextCount = 0;
     }
 
-    await db.mealEntries.put({
+    await saveMealEntry({
       id: `${memberId}_${date}`,
       memberId,
       date,

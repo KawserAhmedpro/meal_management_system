@@ -21,7 +21,7 @@ import {
 } from 'lucide-react';
 
 export const ExpensesPage: React.FC = () => {
-  const { selectedMonth, settings } = useApp();
+  const { selectedMonth, settings, deleteExpense } = useApp();
 
   const expenses =
     useLiveQuery(
@@ -77,7 +77,7 @@ export const ExpensesPage: React.FC = () => {
 
   const handleDeleteConfirm = async () => {
     if (!expenseToDelete) return;
-    await db.expenses.delete(expenseToDelete.id);
+    await deleteExpense(expenseToDelete.id);
     setExpenseToDelete(null);
   };
 

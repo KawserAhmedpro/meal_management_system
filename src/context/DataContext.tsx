@@ -24,11 +24,11 @@ import {
 import { DEFAULT_SETTINGS, DEFAULT_CATEGORIES } from '../db/seedData';
 import {
   COLLECTIONS,
-  upsertFirestoreDoc,
-  deleteFirestoreDoc,
-  batchWriteDocs,
   SyncState,
 } from '../services/firestore';
+import { DataMutationGateway } from '../services/dataGateway';
+import { outboxFlusher, SyncDiagnostics } from '../services/outboxFlusher';
+import { safeInboundSync } from '../services/inboundSync';
 import {
   sanitizeAndBuildPublicData,
   publishMonthToPublicPortal,
@@ -60,6 +60,7 @@ export interface DataContextType {
   isCloudConnected: boolean;
 
   // Mutation methods
+  createMember: (memberData: Omit<Member, 'id'> | Member) => Promise<Member>;
   saveMember: (member: Member) => Promise<void>;
   deleteMember: (id: string) => Promise<void>;
   saveMealEntry: (entry: MealEntry) => Promise<void>;
@@ -68,6 +69,7 @@ export interface DataContextType {
   deleteExpense: (id: string) => Promise<void>;
   saveDeposit: (deposit: Deposit) => Promise<void>;
   deleteDeposit: (id: string) => Promise<void>;
+  saveCategory: (category: Category) => Promise<void>;
   saveManager: (manager: ManagerPeriod) => Promise<void>;
   deleteManager: (id: string) => Promise<void>;
   saveDailyClosure: (closure: DailyMealClosure) => Promise<void>;
@@ -122,6 +124,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [hasPendingWrites, setHasPendingWrites] = useState<boolean>(false);
   const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null);
   const [syncError, setSyncError] = useState<string | null>(null);
+  const [syncDiagnostics, setSyncDiagnostics] = useState<SyncDiagnostics | null>(null);
 
   // UI state
   const [selectedMonth, setSelectedMonthState] = useState<string>('2026-03');
@@ -180,8 +183,12 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
             const list: Member[] = [];
             snapshot.forEach((d) => list.push(d.data() as Member));
             setCloudMembers(list);
-            // Background cache mirror to Dexie
-            if (list.length > 0) db.members.bulkPut(list).catch(() => {});
+            // Safe Inbound Sync to Dexie
+            if (list.length > 0) {
+              safeInboundSync(db.members, COLLECTIONS.MEMBERS, list, (m) => m.id).catch((err) =>
+                console.error('[DataContext] Inbound sync error for members:', err)
+              );
+            }
           },
           (err) => setSyncError(err.message)
         )
@@ -198,7 +205,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
             const list: MealEntry[] = [];
             snapshot.forEach((d) => list.push(d.data() as MealEntry));
             setCloudMealEntries(list);
-            if (list.length > 0) db.mealEntries.bulkPut(list).catch(() => {});
+            if (list.length > 0) {
+              safeInboundSync(db.mealEntries, COLLECTIONS.MEAL_ENTRIES, list, (m) => m.id).catch((err) =>
+                console.error('[DataContext] Inbound sync error for meal entries:', err)
+              );
+            }
           },
           (err) => setSyncError(err.message)
         )
@@ -215,7 +226,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
             const list: Expense[] = [];
             snapshot.forEach((d) => list.push(d.data() as Expense));
             setCloudExpenses(list);
-            if (list.length > 0) db.expenses.bulkPut(list).catch(() => {});
+            if (list.length > 0) {
+              safeInboundSync(db.expenses, COLLECTIONS.EXPENSES, list, (e) => e.id).catch((err) =>
+                console.error('[DataContext] Inbound sync error for expenses:', err)
+              );
+            }
           },
           (err) => setSyncError(err.message)
         )
@@ -232,7 +247,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
             const list: Deposit[] = [];
             snapshot.forEach((d) => list.push(d.data() as Deposit));
             setCloudDeposits(list);
-            if (list.length > 0) db.deposits.bulkPut(list).catch(() => {});
+            if (list.length > 0) {
+              safeInboundSync(db.deposits, COLLECTIONS.DEPOSITS, list, (d) => d.id).catch((err) =>
+                console.error('[DataContext] Inbound sync error for deposits:', err)
+              );
+            }
           },
           (err) => setSyncError(err.message)
         )
@@ -249,7 +268,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
             const list: ManagerPeriod[] = [];
             snapshot.forEach((d) => list.push(d.data() as ManagerPeriod));
             setCloudManagers(list);
-            if (list.length > 0) db.managers.bulkPut(list).catch(() => {});
+            if (list.length > 0) {
+              safeInboundSync(db.managers, COLLECTIONS.MANAGERS, list, (m) => m.id).catch((err) =>
+                console.error('[DataContext] Inbound sync error for managers:', err)
+              );
+            }
           },
           (err) => setSyncError(err.message)
         )
@@ -266,7 +289,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
             const list: DailyMealClosure[] = [];
             snapshot.forEach((d) => list.push(d.data() as DailyMealClosure));
             setCloudClosures(list);
-            if (list.length > 0) db.dailyClosures.bulkPut(list).catch(() => {});
+            if (list.length > 0) {
+              safeInboundSync(db.dailyClosures, COLLECTIONS.DAILY_CLOSURES, list, (c) => c.date).catch((err) =>
+                console.error('[DataContext] Inbound sync error for closures:', err)
+              );
+            }
           },
           (err) => setSyncError(err.message)
         )
@@ -283,7 +310,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
             const list: Category[] = [];
             snapshot.forEach((d) => list.push(d.data() as Category));
             setCloudCategories(list);
-            if (list.length > 0) db.categories.bulkPut(list).catch(() => {});
+            if (list.length > 0) {
+              safeInboundSync(db.categories, COLLECTIONS.CATEGORIES, list, (c) => c.id).catch((err) =>
+                console.error('[DataContext] Inbound sync error for categories:', err)
+              );
+            }
           },
           (err) => setSyncError(err.message)
         )
@@ -300,7 +331,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
             if (snapshot.exists()) {
               const data = snapshot.data() as SystemSettings;
               setCloudSettings(data);
-              db.settings.put(data).catch(() => {});
+              safeInboundSync(db.settings, COLLECTIONS.SETTINGS, [data], () => 'app_settings').catch((err) =>
+                console.error('[DataContext] Inbound sync error for settings:', err)
+              );
             }
           },
           (err) => setSyncError(err.message)
@@ -316,55 +349,51 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
   }, [isCloudActive]);
 
-  // Determine Effective Data Sources: Prefer Cloud if active & populated, otherwise Dexie
-  const members = useMemo(
-    () => (isCloudActive && cloudMembers !== null ? cloudMembers : dexieMembers),
-    [isCloudActive, cloudMembers, dexieMembers]
-  );
+  // Start Outbox Flusher lifecycle when cloud is active
+  useEffect(() => {
+    if (!isCloudActive) {
+      outboxFlusher.stopPeriodicSync();
+      return;
+    }
 
-  const mealEntries = useMemo(
-    () => (isCloudActive && cloudMealEntries !== null ? cloudMealEntries : dexieMealEntries),
-    [isCloudActive, cloudMealEntries, dexieMealEntries]
-  );
+    outboxFlusher.startPeriodicSync();
+    const unsubscribeFlusher = outboxFlusher.subscribe((diag) => {
+      setSyncDiagnostics(diag);
+      if (diag.lastFlushedAt) {
+        setLastSyncedAt(new Date(diag.lastFlushedAt));
+      }
+    });
 
-  const expenses = useMemo(
-    () => (isCloudActive && cloudExpenses !== null ? cloudExpenses : dexieExpenses),
-    [isCloudActive, cloudExpenses, dexieExpenses]
-  );
+    return () => {
+      unsubscribeFlusher();
+      outboxFlusher.stopPeriodicSync();
+    };
+  }, [isCloudActive]);
 
-  const deposits = useMemo(
-    () => (isCloudActive && cloudDeposits !== null ? cloudDeposits : dexieDeposits),
-    [isCloudActive, cloudDeposits, dexieDeposits]
-  );
+  // Determine Effective Data Sources: Local-First (Dexie is always authoritative local operational storage)
+  const members = dexieMembers;
+  const mealEntries = dexieMealEntries;
+  const expenses = dexieExpenses;
+  const deposits = dexieDeposits;
+  const categories = dexieCategories;
+  const managers = dexieManagers;
+  const dailyClosures = dexieClosures;
+  const settings: SystemSettings = dexieSettings;
 
-  const categories = useMemo(
-    () => (isCloudActive && cloudCategories !== null ? cloudCategories : dexieCategories),
-    [isCloudActive, cloudCategories, dexieCategories]
-  );
-
-  const managers = useMemo(
-    () => (isCloudActive && cloudManagers !== null ? cloudManagers : dexieManagers),
-    [isCloudActive, cloudManagers, dexieManagers]
-  );
-
-  const dailyClosures = useMemo(
-    () => (isCloudActive && cloudClosures !== null ? cloudClosures : dexieClosures),
-    [isCloudActive, cloudClosures, dexieClosures]
-  );
-
-  const settings: SystemSettings = useMemo(
-    () => (isCloudActive && cloudSettings !== null ? cloudSettings : dexieSettings),
-    [isCloudActive, cloudSettings, dexieSettings]
-  );
-
-  // Sync state calculation
+  // Sync state calculation based on Outbox and Diagnostics
   const syncState: SyncState = useMemo(() => {
     if (!isCloudActive) return 'LOCAL_ONLY';
-    if (syncError) return 'SYNC_ERROR';
     if (!isOnline) return 'OFFLINE_WORKING';
-    if (hasPendingWrites) return 'ONLINE_SYNCING';
+    if (syncDiagnostics?.conflictsCount && syncDiagnostics.conflictsCount > 0) return 'SYNC_CONFLICT';
+    if (syncDiagnostics?.quarantinedCount && syncDiagnostics.quarantinedCount > 0) return 'SYNC_CONFLICT';
+    if (syncDiagnostics?.status === 'syncing' || hasPendingWrites) return 'ONLINE_SYNCING';
+    if (syncDiagnostics?.status === 'error' || syncError) return 'SYNC_ERROR';
     return 'ONLINE_SYNCED';
-  }, [isCloudActive, syncError, isOnline, hasPendingWrites]);
+  }, [isCloudActive, isOnline, syncDiagnostics, hasPendingWrites, syncError]);
+
+  const pendingWritesCount = useMemo(() => {
+    return (syncDiagnostics?.pendingCount || 0) + (syncDiagnostics?.leasedCount || 0);
+  }, [syncDiagnostics]);
 
   // Selected Month Synchronization
   useEffect(() => {
@@ -379,102 +408,113 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   // ---------------------------------------------------------------------------
-  // Mutations (Unified Cloud + Dexie Dual-Write)
+  // Mutations (Local-First Gateway + Outbox Synchronization)
+  // All mutations atomically commit to Dexie + Outbox, then trigger sync
   // ---------------------------------------------------------------------------
 
-  const saveMember = async (member: Member) => {
-    await db.members.put(member);
+  const createMember = async (memberData: Omit<Member, 'id'> | Member): Promise<Member> => {
+    const { entity } = await DataMutationGateway.createMember(memberData);
     if (isCloudActive) {
-      await upsertFirestoreDoc(COLLECTIONS.MEMBERS, member.id, member);
+      outboxFlusher.triggerSync();
+    }
+    return entity;
+  };
+
+  const saveMember = async (member: Member) => {
+    await DataMutationGateway.saveMember(member);
+    if (isCloudActive) {
+      outboxFlusher.triggerSync();
     }
   };
 
   const deleteMember = async (id: string) => {
-    await db.members.delete(id);
+    await DataMutationGateway.deleteMember(id);
     if (isCloudActive) {
-      await deleteFirestoreDoc(COLLECTIONS.MEMBERS, id);
+      outboxFlusher.triggerSync();
     }
   };
 
   const saveMealEntry = async (entry: MealEntry) => {
-    await db.mealEntries.put(entry);
+    await DataMutationGateway.saveMealEntry(entry);
     if (isCloudActive) {
-      await upsertFirestoreDoc(COLLECTIONS.MEAL_ENTRIES, entry.id, entry);
+      outboxFlusher.triggerSync();
     }
   };
 
   const saveMealEntriesBulk = async (entries: MealEntry[]) => {
-    await db.mealEntries.bulkPut(entries);
+    await DataMutationGateway.saveMealEntriesBulk(entries);
     if (isCloudActive) {
-      await batchWriteDocs(COLLECTIONS.MEAL_ENTRIES, entries, (e) => e.id);
+      outboxFlusher.triggerSync();
     }
   };
 
   const saveExpense = async (expense: Expense) => {
-    await db.expenses.put(expense);
+    await DataMutationGateway.saveExpense(expense);
     if (isCloudActive) {
-      await upsertFirestoreDoc(COLLECTIONS.EXPENSES, expense.id, expense);
+      outboxFlusher.triggerSync();
     }
   };
 
   const deleteExpense = async (id: string) => {
-    await db.expenses.delete(id);
+    await DataMutationGateway.deleteExpense(id);
     if (isCloudActive) {
-      await deleteFirestoreDoc(COLLECTIONS.EXPENSES, id);
+      outboxFlusher.triggerSync();
     }
   };
 
   const saveDeposit = async (deposit: Deposit) => {
-    await db.deposits.put(deposit);
+    await DataMutationGateway.saveDeposit(deposit);
     if (isCloudActive) {
-      await upsertFirestoreDoc(COLLECTIONS.DEPOSITS, deposit.id, deposit);
+      outboxFlusher.triggerSync();
     }
   };
 
   const deleteDeposit = async (id: string) => {
-    await db.deposits.delete(id);
+    await DataMutationGateway.deleteDeposit(id);
     if (isCloudActive) {
-      await deleteFirestoreDoc(COLLECTIONS.DEPOSITS, id);
+      outboxFlusher.triggerSync();
+    }
+  };
+
+  const saveCategory = async (category: Category) => {
+    await DataMutationGateway.saveCategory(category);
+    if (isCloudActive) {
+      outboxFlusher.triggerSync();
     }
   };
 
   const saveManager = async (manager: ManagerPeriod) => {
-    await db.managers.put(manager);
+    await DataMutationGateway.saveManager(manager);
     if (isCloudActive) {
-      await upsertFirestoreDoc(COLLECTIONS.MANAGERS, manager.id, manager);
+      outboxFlusher.triggerSync();
     }
   };
 
   const deleteManager = async (id: string) => {
-    await db.managers.delete(id);
+    await DataMutationGateway.deleteManager(id);
     if (isCloudActive) {
-      await deleteFirestoreDoc(COLLECTIONS.MANAGERS, id);
+      outboxFlusher.triggerSync();
     }
   };
 
   const saveDailyClosure = async (closure: DailyMealClosure) => {
-    await db.dailyClosures.put(closure);
+    await DataMutationGateway.saveDailyClosure(closure);
     if (isCloudActive) {
-      await upsertFirestoreDoc(COLLECTIONS.DAILY_CLOSURES, closure.date, closure);
+      outboxFlusher.triggerSync();
     }
   };
 
   const deleteDailyClosure = async (date: string) => {
-    await db.dailyClosures.delete(date);
+    await DataMutationGateway.deleteDailyClosure(date);
     if (isCloudActive) {
-      await deleteFirestoreDoc(COLLECTIONS.DAILY_CLOSURES, date);
+      outboxFlusher.triggerSync();
     }
   };
 
   const updateSettings = async (newSettings: Partial<SystemSettings>) => {
-    const updated: SystemSettings = {
-      ...settings,
-      ...newSettings,
-      id: 'app_settings',
-    };
-    await db.settings.put(updated);
+    await DataMutationGateway.updateSettings(newSettings);
     if (isCloudActive) {
-      await upsertFirestoreDoc(COLLECTIONS.SETTINGS, 'app_settings', updated);
+      outboxFlusher.triggerSync();
     }
   };
 
@@ -680,9 +720,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         selectedMonth,
         setSelectedMonth,
         syncState,
-        pendingWritesCount: hasPendingWrites ? 1 : 0,
+        pendingWritesCount,
         lastSyncedAt,
         isCloudConnected: isCloudActive,
+        createMember,
         saveMember,
         deleteMember,
         saveMealEntry,
@@ -691,6 +732,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         deleteExpense,
         saveDeposit,
         deleteDeposit,
+        saveCategory,
         saveManager,
         deleteManager,
         saveDailyClosure,

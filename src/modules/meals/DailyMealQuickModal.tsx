@@ -17,7 +17,7 @@ export const DailyMealQuickModal: React.FC<DailyMealQuickModalProps> = ({
   onClose,
   onSuccess,
 }) => {
-  const { selectedMonth } = useApp();
+  const { selectedMonth, saveMealEntry } = useApp();
   const members = useLiveQuery(() => db.members.where('status').equals('Active').toArray(), []) || [];
   
   const [memberSearch, setMemberSearch] = useState('');
@@ -41,7 +41,7 @@ export const DailyMealQuickModal: React.FC<DailyMealQuickModalProps> = ({
     const entryId = `${selectedMemberId}_${date}`;
     const count = status === 'ON' ? 1 : status === 'Double' ? 2 : 0;
 
-    await db.mealEntries.put({
+    await saveMealEntry({
       id: entryId,
       memberId: selectedMemberId,
       date,

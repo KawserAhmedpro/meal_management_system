@@ -3,7 +3,6 @@ import { Modal } from '../../components/ui/Modal';
 import { Input } from '../../components/ui/Input';
 import { Button } from '../../components/ui/Button';
 import { DailyMealClosure } from '../../types';
-import { db } from '../../db';
 import { useApp } from '../../context/AppContext';
 import { Calendar, ShieldAlert, Sparkles, CheckCircle } from 'lucide-react';
 
@@ -22,7 +21,7 @@ export const DailyClosureModal: React.FC<DailyClosureModalProps> = ({
   existingClosure,
   onSuccess,
 }) => {
-  const { selectedMonth } = useApp();
+  const { selectedMonth, saveDailyClosure, deleteDailyClosure } = useApp();
   const [date, setDate] = useState(targetDate || `${selectedMonth}-01`);
   const [status, setStatus] = useState<'FULL_OFF' | 'FULL_ON'>('FULL_OFF');
   const [reason, setReason] = useState('College Holiday');
@@ -59,30 +58,39 @@ export const DailyClosureModal: React.FC<DailyClosureModalProps> = ({
     setIsSubmitting(true);
     const month = date.substring(0, 7);
 
-    if (status === 'FULL_ON') {
-      // If user marks FULL_ON, remove from closures table (or set status FULL_ON)
-      await db.dailyClosures.delete(date);
-    } else {
-      await db.dailyClosures.put({
-        date,
-        month,
-        status: 'FULL_OFF',
-        reason,
-        updatedAt: Date.now(),
-      });
+    try {
+      if (status === 'FULL_ON') {
+        // If user marks FULL_ON, remove from closures table (or set status FULL_ON)
+        await deleteDailyClosure(date);
+      } else {
+        await saveDailyClosure({
+          date,
+          month,
+          status: 'FULL_OFF',
+          reason,
+          updatedAt: Date.now(),
+        });
+      }
+      onClose();
+      if (onSuccess) onSuccess();
+    } catch (err) {
+      console.error('[DailyClosureModal] Save error:', err);
+    } finally {
+      setIsSubmitting(false);
     }
-
-    setIsSubmitting(false);
-    onClose();
-    if (onSuccess) onSuccess();
   };
 
   const handleRemoveClosure = async () => {
     setIsSubmitting(true);
-    await db.dailyClosures.delete(date);
-    setIsSubmitting(false);
-    onClose();
-    if (onSuccess) onSuccess();
+    try {
+      await deleteDailyClosure(date);
+      onClose();
+      if (onSuccess) onSuccess();
+    } catch (err) {
+      console.error('[DailyClosureModal] Remove error:', err);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (

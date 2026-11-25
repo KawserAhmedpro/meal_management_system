@@ -158,7 +158,7 @@ export const BackupRestorePage: React.FC = () => {
 
         await db.transaction(
           'rw',
-          [db.members, db.mealEntries, db.expenses, db.deposits, db.categories],
+          [db.members, db.mealEntries, db.expenses, db.deposits, db.categories, db.sequence_counters],
           async () => {
             await db.members.clear();
             await db.mealEntries.clear();
@@ -171,19 +171,53 @@ export const BackupRestorePage: React.FC = () => {
             if (resExpenses.length) await db.expenses.bulkAdd(resExpenses);
             if (resDeposits.length) await db.deposits.bulkAdd(resDeposits);
             if (resCategories.length) await db.categories.bulkAdd(resCategories);
+
+            // Reconcile sequence counter without ever decreasing it (prevents sequence regression)
+            let maxRestoredNum = 0;
+            for (const m of resMembers) {
+              const match = m.id && m.id.match(/^MEM-(\d+)$/i);
+              if (match) {
+                const num = parseInt(match[1], 10);
+                if (!isNaN(num) && num > maxRestoredNum) maxRestoredNum = num;
+              }
+            }
+            const currentCounter = await db.sequence_counters.get('member_id');
+            const safeLastVal = Math.max(currentCounter?.lastValue || 0, maxRestoredNum);
+            await db.sequence_counters.put({
+              id: 'member_id',
+              lastValue: safeLastVal,
+              updatedAt: Date.now(),
+            });
           }
         );
       } else {
         // Merge mode
         await db.transaction(
           'rw',
-          [db.members, db.mealEntries, db.expenses, db.deposits, db.categories],
+          [db.members, db.mealEntries, db.expenses, db.deposits, db.categories, db.sequence_counters],
           async () => {
             if (resMembers.length) await db.members.bulkPut(resMembers);
             if (resMealEntries.length) await db.mealEntries.bulkPut(resMealEntries);
             if (resExpenses.length) await db.expenses.bulkPut(resExpenses);
             if (resDeposits.length) await db.deposits.bulkPut(resDeposits);
             if (resCategories.length) await db.categories.bulkPut(resCategories);
+
+            // Reconcile sequence counter monotonically
+            let maxRestoredNum = 0;
+            for (const m of resMembers) {
+              const match = m.id && m.id.match(/^MEM-(\d+)$/i);
+              if (match) {
+                const num = parseInt(match[1], 10);
+                if (!isNaN(num) && num > maxRestoredNum) maxRestoredNum = num;
+              }
+            }
+            const currentCounter = await db.sequence_counters.get('member_id');
+            const safeLastVal = Math.max(currentCounter?.lastValue || 0, maxRestoredNum);
+            await db.sequence_counters.put({
+              id: 'member_id',
+              lastValue: safeLastVal,
+              updatedAt: Date.now(),
+            });
           }
         );
       }
@@ -219,7 +253,7 @@ export const BackupRestorePage: React.FC = () => {
     if (!excelPreview) return;
     setIsImportingExcel(true);
     try {
-      await db.transaction('rw', [db.members, db.mealEntries, db.expenses, db.deposits], async () => {
+      await db.transaction('rw', [db.members, db.mealEntries, db.expenses, db.deposits, db.sequence_counters], async () => {
         if (excelPreview.members.length > 0) {
           await db.members.bulkPut(excelPreview.members);
         }
@@ -231,6 +265,25 @@ export const BackupRestorePage: React.FC = () => {
         }
         if (excelPreview.deposits.length > 0) {
           await db.deposits.bulkPut(excelPreview.deposits);
+        }
+
+        // Reconcile sequence counter monotonically against imported Excel members
+        let maxExcelNum = 0;
+        for (const m of excelPreview.members) {
+          const match = m.id && m.id.match(/^MEM-(\d+)$/i);
+          if (match) {
+            const num = parseInt(match[1], 10);
+            if (!isNaN(num) && num > maxExcelNum) maxExcelNum = num;
+          }
+        }
+        if (maxExcelNum > 0) {
+          const currentCounter = await db.sequence_counters.get('member_id');
+          const safeLastVal = Math.max(currentCounter?.lastValue || 0, maxExcelNum);
+          await db.sequence_counters.put({
+            id: 'member_id',
+            lastValue: safeLastVal,
+            updatedAt: Date.now(),
+          });
         }
       });
 

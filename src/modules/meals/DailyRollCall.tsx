@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { Member, MealEntry, MealStatus } from '../../types';
 import { db } from '../../db';
+import { useApp } from '../../context/AppContext';
 import { Button } from '../../components/ui/Button';
 import { formatDate } from '../../utils/formatters';
 import {
@@ -29,6 +30,7 @@ export const DailyRollCall: React.FC<DailyRollCallProps> = ({
   onDateChange,
   searchFilter,
 }) => {
+  const { saveMealEntry, saveMealEntriesBulk, deleteDailyClosure } = useApp();
   const [selectedFloor, setSelectedFloor] = useState('ALL');
 
   // Query closure for the current selectedDate
@@ -63,7 +65,7 @@ export const DailyRollCall: React.FC<DailyRollCallProps> = ({
   const setMemberStatus = async (memberId: string, status: MealStatus) => {
     const month = selectedDate.substring(0, 7);
     const count = status === 'ON' ? 1 : status === 'Double' ? 2 : 0;
-    await db.mealEntries.put({
+    await saveMealEntry({
       id: `${memberId}_${selectedDate}`,
       memberId,
       date: selectedDate,
@@ -100,7 +102,7 @@ export const DailyRollCall: React.FC<DailyRollCallProps> = ({
       updatedAt: Date.now(),
     }));
 
-    await db.mealEntries.bulkPut(newEntries);
+    await saveMealEntriesBulk(newEntries);
   };
 
   // Filter members
@@ -225,7 +227,7 @@ export const DailyRollCall: React.FC<DailyRollCallProps> = ({
             size="sm"
             variant="outline"
             onClick={async () => {
-              await db.dailyClosures.delete(selectedDate);
+              await deleteDailyClosure(selectedDate);
             }}
             className="border-rose-300 text-rose-800 hover:bg-rose-100 shrink-0"
           >
