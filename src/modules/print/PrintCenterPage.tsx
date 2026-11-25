@@ -13,11 +13,11 @@ export const PrintCenterPage: React.FC = () => {
   const [selectedFloor, setSelectedFloor] = useState('ALL');
   const [printDate, setPrintDate] = useState(`${selectedMonth}-01`);
 
-  // Queries
-  const members = useLiveQuery(() => db.members.where('status').equals('Active').toArray(), []) || [];
+  // Queries (exclude soft-deleted tombstones)
+  const members = useLiveQuery(() => db.members.where('status').equals('Active').filter((m) => !m._isDeleted).toArray(), []) || [];
   const mealEntries =
     useLiveQuery(
-      () => db.mealEntries.where('month').equals(selectedMonth).toArray(),
+      () => db.mealEntries.where('month').equals(selectedMonth).filter((m) => !m._isDeleted).toArray(),
       [selectedMonth]
     ) || [];
 
@@ -25,7 +25,7 @@ export const PrintCenterPage: React.FC = () => {
     () => db.dailyClosures.get(printDate),
     [printDate]
   );
-  const isFullOff = closure?.status === 'FULL_OFF';
+  const isFullOff = Boolean(closure && !closure._isDeleted && closure.status === 'FULL_OFF');
 
   // Group members by room
   const roomGroups = useMemo(() => {

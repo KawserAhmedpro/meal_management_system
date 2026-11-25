@@ -99,14 +99,14 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const { user, isAdmin } = useAuth();
   const isCloudActive = Boolean(isFirebaseConfigured && user && isAdmin && firestore);
 
-  // Fallback Dexie queries
-  const dexieMembers = useLiveQuery(() => db.members.toArray(), []) || [];
-  const dexieMealEntries = useLiveQuery(() => db.mealEntries.toArray(), []) || [];
-  const dexieExpenses = useLiveQuery(() => db.expenses.toArray(), []) || [];
-  const dexieDeposits = useLiveQuery(() => db.deposits.toArray(), []) || [];
-  const dexieCategories = useLiveQuery(() => db.categories.toArray(), []) || [];
-  const dexieManagers = useLiveQuery(() => db.managers.orderBy('startDate').toArray(), []) || [];
-  const dexieClosures = useLiveQuery(() => db.dailyClosures.toArray(), []) || [];
+  // Fallback Dexie queries (exclude soft-deleted tombstones from active operational state)
+  const dexieMembers = useLiveQuery(() => db.members.filter((m) => !m._isDeleted).toArray(), []) || [];
+  const dexieMealEntries = useLiveQuery(() => db.mealEntries.filter((m) => !m._isDeleted).toArray(), []) || [];
+  const dexieExpenses = useLiveQuery(() => db.expenses.filter((e) => !e._isDeleted).toArray(), []) || [];
+  const dexieDeposits = useLiveQuery(() => db.deposits.filter((d) => !d._isDeleted).toArray(), []) || [];
+  const dexieCategories = useLiveQuery(() => db.categories.filter((c) => !c._isDeleted).toArray(), []) || [];
+  const dexieManagers = useLiveQuery(() => db.managers.orderBy('startDate').filter((m) => !m._isDeleted).toArray(), []) || [];
+  const dexieClosures = useLiveQuery(() => db.dailyClosures.filter((c) => !c._isDeleted).toArray(), []) || [];
   const dexieSettings = useLiveQuery(() => db.settings.get('app_settings'), []) || DEFAULT_SETTINGS;
 
   // Cloud State
@@ -641,11 +641,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         count++;
       }
 
-      // Compute authoritative managers from Dexie
-      const dexieManagers = await db.managers.toArray();
-      const dexieMealEntries = await db.mealEntries.toArray();
-      const dexieExpenses = await db.expenses.toArray();
-      const dexieClosures = await db.dailyClosures.toArray();
+      // Compute authoritative managers from Dexie (excluding soft-deleted tombstones)
+      const dexieManagers = await db.managers.filter((m) => !m._isDeleted).toArray();
+      const dexieMealEntries = await db.mealEntries.filter((m) => !m._isDeleted).toArray();
+      const dexieExpenses = await db.expenses.filter((e) => !e._isDeleted).toArray();
+      const dexieClosures = await db.dailyClosures.filter((c) => !c._isDeleted).toArray();
 
       const currentManagerSummary = buildPublicCurrentManagerSummary(
         dexieManagers,

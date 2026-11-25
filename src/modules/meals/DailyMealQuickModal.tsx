@@ -18,7 +18,7 @@ export const DailyMealQuickModal: React.FC<DailyMealQuickModalProps> = ({
   onSuccess,
 }) => {
   const { selectedMonth, saveMealEntry } = useApp();
-  const members = useLiveQuery(() => db.members.where('status').equals('Active').toArray(), []) || [];
+  const members = useLiveQuery(() => db.members.where('status').equals('Active').filter((m) => !m._isDeleted).toArray(), []) || [];
   
   const [memberSearch, setMemberSearch] = useState('');
   const [selectedMemberId, setSelectedMemberId] = useState('');

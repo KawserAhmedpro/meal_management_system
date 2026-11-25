@@ -32,7 +32,7 @@ export const MealGrid: React.FC<MealGridProps> = ({
   // Live query for daily closures in this month
   const closures =
     useLiveQuery(
-      () => db.dailyClosures.where('month').equals(selectedMonth).toArray(),
+      () => db.dailyClosures.where('month').equals(selectedMonth).filter((c) => !c._isDeleted).toArray(),
       [selectedMonth]
     ) || [];
 

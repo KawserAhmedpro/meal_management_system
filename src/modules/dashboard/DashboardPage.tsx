@@ -22,16 +22,16 @@ export const DashboardPage: React.FC = () => {
   // Selected manager ID for controlling the entire dashboard
   const [selectedManagerId, setSelectedManagerId] = useState<string>('');
 
-  // Reactive live queries from IndexedDB
-  const members = useLiveQuery(() => db.members.toArray(), []) || [];
+  // Reactive live queries from IndexedDB (exclude soft-deleted tombstones)
+  const members = useLiveQuery(() => db.members.filter((m) => !m._isDeleted).toArray(), []) || [];
   const managers =
-    useLiveQuery(() => db.managers.orderBy('startDate').toArray(), []) || [];
+    useLiveQuery(() => db.managers.orderBy('startDate').filter((m) => !m._isDeleted).toArray(), []) || [];
 
   // All entries across all dates for comprehensive Manager Assignment-Period Accounting
-  const allMealEntries = useLiveQuery(() => db.mealEntries.toArray(), []) || [];
-  const allExpenses = useLiveQuery(() => db.expenses.toArray(), []) || [];
-  const allDeposits = useLiveQuery(() => db.deposits.toArray(), []) || [];
-  const allClosures = useLiveQuery(() => db.dailyClosures.toArray(), []) || [];
+  const allMealEntries = useLiveQuery(() => db.mealEntries.filter((m) => !m._isDeleted).toArray(), []) || [];
+  const allExpenses = useLiveQuery(() => db.expenses.filter((e) => !e._isDeleted).toArray(), []) || [];
+  const allDeposits = useLiveQuery(() => db.deposits.filter((d) => !d._isDeleted).toArray(), []) || [];
+  const allClosures = useLiveQuery(() => db.dailyClosures.filter((c) => !c._isDeleted).toArray(), []) || [];
 
   // 1. Compute assignment period summaries for all managers
   const managerAssignmentSummaries = useMemo(() => {

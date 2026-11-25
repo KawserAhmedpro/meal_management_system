@@ -39,7 +39,7 @@ export const MemberProfileModal: React.FC<MemberProfileModalProps> = ({
           ? db.mealEntries
               .where('memberId')
               .equals(member.id)
-              .filter((m) => m.month === selectedMonth)
+              .filter((m) => !m._isDeleted && m.month === selectedMonth)
               .toArray()
           : Promise.resolve([]),
       [member, selectedMonth]
@@ -52,7 +52,7 @@ export const MemberProfileModal: React.FC<MemberProfileModalProps> = ({
           ? db.deposits
               .where('memberId')
               .equals(member.id)
-              .filter((d) => d.month === selectedMonth)
+              .filter((d) => !d._isDeleted && d.month === selectedMonth)
               .toArray()
           : Promise.resolve([]),
       [member, selectedMonth]
@@ -61,12 +61,12 @@ export const MemberProfileModal: React.FC<MemberProfileModalProps> = ({
   // All expenses for meal rate
   const allExpenses =
     useLiveQuery(
-      () => db.expenses.where('month').equals(selectedMonth).toArray(),
+      () => db.expenses.where('month').equals(selectedMonth).filter((e) => !e._isDeleted).toArray(),
       [selectedMonth]
     ) || [];
   const allMeals =
     useLiveQuery(
-      () => db.mealEntries.where('month').equals(selectedMonth).toArray(),
+      () => db.mealEntries.where('month').equals(selectedMonth).filter((m) => !m._isDeleted).toArray(),
       [selectedMonth]
     ) || [];
 

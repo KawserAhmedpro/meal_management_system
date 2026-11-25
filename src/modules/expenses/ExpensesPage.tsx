@@ -25,11 +25,11 @@ export const ExpensesPage: React.FC = () => {
 
   const expenses =
     useLiveQuery(
-      () => db.expenses.where('month').equals(selectedMonth).toArray(),
+      () => db.expenses.where('month').equals(selectedMonth).filter((e) => !e._isDeleted).toArray(),
       [selectedMonth]
     ) || [];
 
-  const categories = useLiveQuery(() => db.categories.toArray(), []) || [];
+  const categories = useLiveQuery(() => db.categories.filter((c) => !c._isDeleted).toArray(), []) || [];
 
   // Filter & Search states
   const [searchQuery, setSearchQuery] = useState('');

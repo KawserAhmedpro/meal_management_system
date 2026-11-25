@@ -46,30 +46,30 @@ export const ReportsPage: React.FC = () => {
 
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Queries
-  const members = useLiveQuery(() => db.members.toArray(), []) || [];
+  // Queries (exclude soft-deleted tombstones)
+  const members = useLiveQuery(() => db.members.filter((m) => !m._isDeleted).toArray(), []) || [];
   const mealEntries =
     useLiveQuery(
-      () => db.mealEntries.where('month').equals(selectedMonth).toArray(),
+      () => db.mealEntries.where('month').equals(selectedMonth).filter((m) => !m._isDeleted).toArray(),
       [selectedMonth]
     ) || [];
   const expenses =
     useLiveQuery(
-      () => db.expenses.where('month').equals(selectedMonth).toArray(),
+      () => db.expenses.where('month').equals(selectedMonth).filter((e) => !e._isDeleted).toArray(),
       [selectedMonth]
     ) || [];
   const deposits =
     useLiveQuery(
-      () => db.deposits.where('month').equals(selectedMonth).toArray(),
+      () => db.deposits.where('month').equals(selectedMonth).filter((d) => !d._isDeleted).toArray(),
       [selectedMonth]
     ) || [];
   const closures =
     useLiveQuery(
-      () => db.dailyClosures.where('month').equals(selectedMonth).toArray(),
+      () => db.dailyClosures.where('month').equals(selectedMonth).filter((c) => !c._isDeleted).toArray(),
       [selectedMonth]
     ) || [];
   const managers =
-    useLiveQuery(() => db.managers.orderBy('startDate').toArray(), []) || [];
+    useLiveQuery(() => db.managers.orderBy('startDate').filter((m) => !m._isDeleted).toArray(), []) || [];
 
   // Monthly Calculations with closures & Option A manager fees
   const { overview, memberSummaries } = useMemo(() => {

@@ -38,7 +38,7 @@ export const DailyRollCall: React.FC<DailyRollCallProps> = ({
     () => db.dailyClosures.get(selectedDate),
     [selectedDate]
   );
-  const isFullOff = closure?.status === 'FULL_OFF';
+  const isFullOff = Boolean(closure && !closure._isDeleted && closure.status === 'FULL_OFF');
 
   // Change date by delta (-1 or +1 day)
   const handleDateDelta = (delta: number) => {
@@ -85,7 +85,7 @@ export const DailyRollCall: React.FC<DailyRollCallProps> = ({
     const prevD = String(prevDateObj.getDate()).padStart(2, '0');
     const prevDateStr = `${prevY}-${prevM}-${prevD}`;
 
-    const prevEntries = await db.mealEntries.where('date').equals(prevDateStr).toArray();
+    const prevEntries = await db.mealEntries.where('date').equals(prevDateStr).filter((m) => !m._isDeleted).toArray();
     if (prevEntries.length === 0) {
       alert(`No meal records found for previous day (${prevDateStr}) to copy from.`);
       return;

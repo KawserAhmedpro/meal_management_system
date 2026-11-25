@@ -93,9 +93,9 @@ export function sanitizeAndBuildPublicData(
   const monthNum = parseInt(monthStr);
   const daysInMonth = new Date(year, monthNum, 0).getDate();
 
-  // 2. Filter month meals and closures
-  const monthMeals = mealEntries.filter((m) => m.month === month);
-  const monthClosures = dailyClosures.filter((c) => c.month === month);
+  // 2. Filter month meals and closures (exclude soft-deleted tombstones)
+  const monthMeals = mealEntries.filter((m) => !m._isDeleted && m.month === month);
+  const monthClosures = dailyClosures.filter((c) => !c._isDeleted && c.month === month);
   const closureMap = new Map<string, DailyMealClosure>();
   for (const c of monthClosures) {
     closureMap.set(c.date, c);
@@ -146,7 +146,7 @@ export function sanitizeAndBuildPublicData(
 
   // 4. Build Sanitized Market & Dining Expenses
   const monthExpenses = expenses
-    .filter((e) => e.month === month)
+    .filter((e) => !e._isDeleted && e.month === month)
     .sort((a, b) => b.date.localeCompare(a.date));
 
   let marketExpensesTotal = 0;
@@ -184,14 +184,16 @@ export function sanitizeAndBuildPublicData(
     memberTotalMealsMap.set(s.member.id, s.totalMeals);
   }
 
-  const sanitizedMembers: PublicMemberInfo[] = members.map((m) => ({
-    id: m.id,
-    name: m.name,
-    room: m.room,
-    floor: m.floor || '',
-    status: m.status,
-    totalMeals: memberTotalMealsMap.get(m.id) || 0,
-  }));
+  const sanitizedMembers: PublicMemberInfo[] = members
+    .filter((m) => !m._isDeleted)
+    .map((m) => ({
+      id: m.id,
+      name: m.name,
+      room: m.room,
+      floor: m.floor || '',
+      status: m.status,
+      totalMeals: memberTotalMealsMap.get(m.id) || 0,
+    }));
 
   // 6. Return PublicMonthData (Operational monthly data only, NO manager assignment duplication)
   return {
@@ -237,12 +239,13 @@ export function buildPublicCurrentManagerSummary(
   feeRatePerMeal: number = 5,
   referenceDate?: string
 ): PublicCurrentManagerSummary | null {
-  if (!managers || managers.length === 0) return null;
+  const activeManagers = (managers || []).filter((m) => !m._isDeleted);
+  if (activeManagers.length === 0) return null;
 
   // Active manager takes priority; fallback to latest resigned manager
   const manager =
-    managers.find((m) => m.status === 'Active') ||
-    managers[managers.length - 1];
+    activeManagers.find((m) => m.status === 'Active') ||
+    activeManagers[activeManagers.length - 1];
 
   if (!manager) return null;
 
@@ -290,10 +293,11 @@ export function buildPublicAllManagersSummary(
   feeRatePerMeal: number = 5,
   referenceDate?: string
 ): PublicCurrentManagerSummary[] {
-  if (!managers || managers.length === 0) return [];
+  const activeManagers = (managers || []).filter((m) => !m._isDeleted);
+  if (activeManagers.length === 0) return [];
 
   // Sort managers chronologically (Active first, then latest startDate desc)
-  const sorted = [...managers].sort((a, b) => {
+  const sorted = [...activeManagers].sort((a, b) => {
     if (a.status === 'Active' && b.status !== 'Active') return -1;
     if (b.status === 'Active' && a.status !== 'Active') return 1;
     return (b.startDate || '').localeCompare(a.startDate || '');

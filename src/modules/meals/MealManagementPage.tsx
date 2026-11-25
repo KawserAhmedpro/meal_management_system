@@ -28,11 +28,11 @@ export const MealManagementPage: React.FC = () => {
   const [isClosureOpen, setIsClosureOpen] = useState(false);
   const [selectedDailyDate, setSelectedDailyDate] = useState(`${selectedMonth}-01`);
 
-  // Query members and month meals
-  const members = useLiveQuery(() => db.members.where('status').equals('Active').toArray(), []) || [];
+  // Query members and month meals (exclude soft-deleted tombstones)
+  const members = useLiveQuery(() => db.members.where('status').equals('Active').filter((m) => !m._isDeleted).toArray(), []) || [];
   const mealEntries =
     useLiveQuery(
-      () => db.mealEntries.where('month').equals(selectedMonth).toArray(),
+      () => db.mealEntries.where('month').equals(selectedMonth).filter((m) => !m._isDeleted).toArray(),
       [selectedMonth]
     ) || [];
 

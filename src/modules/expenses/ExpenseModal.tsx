@@ -31,7 +31,7 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
   onSuccess,
 }) => {
   const { selectedMonth, saveExpense, saveCategory } = useApp();
-  const categories = useLiveQuery(() => db.categories.toArray(), []) || [];
+  const categories = useLiveQuery(() => db.categories.filter((c) => !c._isDeleted).toArray(), []) || [];
   const [customCategory, setCustomCategory] = useState('');
   const [isAddingCategory, setIsAddingCategory] = useState(false);
 

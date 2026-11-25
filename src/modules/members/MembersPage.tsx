@@ -26,7 +26,7 @@ import {
 
 export const MembersPage: React.FC = () => {
   const { saveMember, deleteMember } = useApp();
-  const members = useLiveQuery(() => db.members.toArray(), []) || [];
+  const members = useLiveQuery(() => db.members.filter((m) => !m._isDeleted).toArray(), []) || [];
 
   // Filter & Search states
   const [searchQuery, setSearchQuery] = useState('');

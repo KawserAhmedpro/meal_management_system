@@ -12,7 +12,7 @@ import {
 } from '../types';
 
 export function isDateFullOff(date: string, closures: DailyMealClosure[]): boolean {
-  const closure = closures.find((c) => c.date === date);
+  const closure = closures.find((c) => !c._isDeleted && c.date === date);
   return closure?.status === 'FULL_OFF';
 }
 
@@ -41,11 +41,13 @@ export function calculateMonthSummary(
   const monthNum = parseInt(monthStr);
   const daysInMonth = new Date(year, monthNum, 0).getDate();
 
-  // Filter for the month
-  const monthMeals = mealEntries.filter((m) => m.month === month);
-  const monthExpenses = expenses.filter((e) => e.month === month);
-  const monthDeposits = deposits.filter((d) => d.month === month);
-  const monthClosures = dailyClosures.filter((c) => c.month === month);
+  // Filter out soft-deleted records and scope to the month
+  const activeMembersList = members.filter((m) => !m._isDeleted);
+  const activeManagersList = managers.filter((m) => !m._isDeleted);
+  const monthMeals = mealEntries.filter((m) => !m._isDeleted && m.month === month);
+  const monthExpenses = expenses.filter((e) => !e._isDeleted && e.month === month);
+  const monthDeposits = deposits.filter((d) => !d._isDeleted && d.month === month);
+  const monthClosures = dailyClosures.filter((c) => !c._isDeleted && c.month === month);
 
   // Set of dates that are FULL MEAL OFF
   const fullOffDateSet = new Set<string>();
@@ -94,8 +96,8 @@ export function calculateMonthSummary(
 
   // If no managers are configured in DB, fallback to virtual single manager
   const effectiveManagers: ManagerPeriod[] =
-    managers.length > 0
-      ? managers
+    activeManagersList.length > 0
+      ? activeManagersList
       : [
           {
             id: 'MGR-DEFAULT',
@@ -159,7 +161,7 @@ export function calculateMonthSummary(
   }
 
   // Member summaries
-  const memberSummaries: MemberFinancialSummary[] = members.map((member) => {
+  const memberSummaries: MemberFinancialSummary[] = activeMembersList.map((member) => {
     let mEffectiveMeals = 0;
     let mRawMeals = 0;
     let mManagerFee = 0;
@@ -226,8 +228,8 @@ export function calculateMonthSummary(
 
   const overview: MonthFinancialOverview = {
     month,
-    totalMembers: members.length,
-    activeMembers: members.filter((m) => m.status === 'Active').length,
+    totalMembers: activeMembersList.length,
+    activeMembers: activeMembersList.filter((m) => m.status === 'Active').length,
     totalMeals,
     totalExpenses,
     mealRate,
@@ -352,7 +354,7 @@ export function calculateManagerAssignmentPeriodAccounting(
   // 1. Identify FULL_OFF dates within the manager's assignment window
   const fullOffDateSet = new Set<string>();
   for (const c of dailyClosures) {
-    if (c.status === 'FULL_OFF' && c.date >= startDate && c.date <= effectiveEndDate) {
+    if (!c._isDeleted && c.status === 'FULL_OFF' && c.date >= startDate && c.date <= effectiveEndDate) {
       fullOffDateSet.add(c.date);
     }
   }
@@ -362,7 +364,7 @@ export function calculateManagerAssignmentPeriodAccounting(
   const activeServingDates = new Set<string>();
 
   for (const entry of mealEntries) {
-    if (entry.date >= startDate && entry.date <= effectiveEndDate) {
+    if (!entry._isDeleted && entry.date >= startDate && entry.date <= effectiveEndDate) {
       const isFullOff = fullOffDateSet.has(entry.date);
       const effectiveCount = isFullOff ? 0 : (entry.count || 0);
       totalMeals += effectiveCount;
@@ -378,7 +380,7 @@ export function calculateManagerAssignmentPeriodAccounting(
   const seenExpenseIds = new Set<string>();
 
   for (const exp of expenses) {
-    if (exp.date >= startDate && exp.date <= effectiveEndDate) {
+    if (!exp._isDeleted && exp.date >= startDate && exp.date <= effectiveEndDate) {
       if (!seenExpenseIds.has(exp.id)) {
         seenExpenseIds.add(exp.id);
         const amount = exp.amount || 0;
@@ -435,7 +437,9 @@ export function calculateAllManagerAssignmentPeriods(
   defaultFeeRatePerMeal: number = 5,
   referenceDate?: string
 ): ManagerAssignmentPeriodSummary[] {
-  const sorted = [...managers].sort((a, b) => b.startDate.localeCompare(a.startDate));
+  const sorted = [...managers]
+    .filter((m) => !m._isDeleted)
+    .sort((a, b) => b.startDate.localeCompare(a.startDate));
   return sorted.map((mgr) =>
     calculateManagerAssignmentPeriodAccounting(
       mgr,
@@ -485,24 +489,26 @@ export function calculateManagerAssignmentDashboardOverview(
   const mealRate = managerSummary.mealRate;
   const feeRatePerMeal = managerSummary.feeRatePerMeal;
 
+  const activeMembersList = members.filter((m) => !m._isDeleted);
+
   // 1. Identify FULL_OFF dates in this manager's assignment window
   const fullOffDateSet = new Set<string>();
   for (const c of dailyClosures) {
-    if (c.status === 'FULL_OFF' && c.date >= startDate && c.date <= effectiveEndDate) {
+    if (!c._isDeleted && c.status === 'FULL_OFF' && c.date >= startDate && c.date <= effectiveEndDate) {
       fullOffDateSet.add(c.date);
     }
   }
 
   // 2. Filter period meal entries
   const periodMealEntries = mealEntries.filter(
-    (m) => m.date >= startDate && m.date <= effectiveEndDate
+    (m) => !m._isDeleted && m.date >= startDate && m.date <= effectiveEndDate
   );
 
   // 3. Filter period expenses (deduplicated by ID)
   const seenExpIds = new Set<string>();
   const periodExpenses: Expense[] = [];
   for (const exp of expenses) {
-    if (exp.date >= startDate && exp.date <= effectiveEndDate) {
+    if (!exp._isDeleted && exp.date >= startDate && exp.date <= effectiveEndDate) {
       if (!seenExpIds.has(exp.id)) {
         seenExpIds.add(exp.id);
         periodExpenses.push(exp);
@@ -514,7 +520,7 @@ export function calculateManagerAssignmentDashboardOverview(
   const seenDepIds = new Set<string>();
   const periodDeposits: Deposit[] = [];
   for (const dep of deposits) {
-    if (dep.date >= startDate && dep.date <= effectiveEndDate) {
+    if (!dep._isDeleted && dep.date >= startDate && dep.date <= effectiveEndDate) {
       if (!seenDepIds.has(dep.id)) {
         seenDepIds.add(dep.id);
         periodDeposits.push(dep);
@@ -546,7 +552,7 @@ export function calculateManagerAssignmentDashboardOverview(
   }
 
   // 7. Calculate member-level financial summaries for this manager period
-  const memberSummaries: MemberFinancialSummary[] = members.map((member) => {
+  const memberSummaries: MemberFinancialSummary[] = activeMembersList.map((member) => {
     const mealInfo = memberMealsMap.get(member.id) || { raw: 0, effective: 0 };
     const mEffectiveMeals = mealInfo.effective;
     const mRawMeals = mealInfo.raw;
@@ -593,8 +599,8 @@ export function calculateManagerAssignmentDashboardOverview(
 
   const overview: MonthFinancialOverview = {
     month: `${startDate} to ${effectiveEndDate}`,
-    totalMembers: members.length,
-    activeMembers: members.filter((m) => m.status === 'Active').length,
+    totalMembers: activeMembersList.length,
+    activeMembers: activeMembersList.filter((m) => m.status === 'Active').length,
     totalMeals: managerSummary.totalMeals,
     totalExpenses: managerSummary.totalMarketExpenses,
     mealRate: managerSummary.mealRate,

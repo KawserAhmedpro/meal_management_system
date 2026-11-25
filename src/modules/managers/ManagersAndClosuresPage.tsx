@@ -63,22 +63,22 @@ export const ManagersAndClosuresPage: React.FC = () => {
   const [managerToDelete, setManagerToDelete] = useState<ManagerPeriod | null>(null);
   const [closureToDelete, setClosureToDelete] = useState<DailyMealClosure | null>(null);
 
-  // IndexedDB live queries
-  const managers = useLiveQuery(() => db.managers.orderBy('startDate').toArray(), []) || [];
+  // IndexedDB live queries (exclude soft-deleted tombstones)
+  const managers = useLiveQuery(() => db.managers.orderBy('startDate').filter((m) => !m._isDeleted).toArray(), []) || [];
   const closures = useLiveQuery(
-    () => db.dailyClosures.where('month').equals(selectedMonth).toArray(),
+    () => db.dailyClosures.where('month').equals(selectedMonth).filter((c) => !c._isDeleted).toArray(),
     [selectedMonth]
   ) || [];
 
-  const members = useLiveQuery(() => db.members.toArray()) || [];
-  const meals = useLiveQuery(() => db.mealEntries.where('month').equals(selectedMonth).toArray(), [selectedMonth]) || [];
-  const expenses = useLiveQuery(() => db.expenses.where('month').equals(selectedMonth).toArray(), [selectedMonth]) || [];
-  const deposits = useLiveQuery(() => db.deposits.where('month').equals(selectedMonth).toArray(), [selectedMonth]) || [];
+  const members = useLiveQuery(() => db.members.filter((m) => !m._isDeleted).toArray(), []) || [];
+  const meals = useLiveQuery(() => db.mealEntries.where('month').equals(selectedMonth).filter((m) => !m._isDeleted).toArray(), [selectedMonth]) || [];
+  const expenses = useLiveQuery(() => db.expenses.where('month').equals(selectedMonth).filter((e) => !e._isDeleted).toArray(), [selectedMonth]) || [];
+  const deposits = useLiveQuery(() => db.deposits.where('month').equals(selectedMonth).filter((d) => !d._isDeleted).toArray(), [selectedMonth]) || [];
 
   // All entries across all months for Manager Assignment-Period Accounting
-  const allMeals = useLiveQuery(() => db.mealEntries.toArray(), []) || [];
-  const allExpenses = useLiveQuery(() => db.expenses.toArray(), []) || [];
-  const allClosures = useLiveQuery(() => db.dailyClosures.toArray(), []) || [];
+  const allMeals = useLiveQuery(() => db.mealEntries.filter((m) => !m._isDeleted).toArray(), []) || [];
+  const allExpenses = useLiveQuery(() => db.expenses.filter((e) => !e._isDeleted).toArray(), []) || [];
+  const allClosures = useLiveQuery(() => db.dailyClosures.filter((c) => !c._isDeleted).toArray(), []) || [];
 
   const managerAssignmentSummaries = React.useMemo(() => {
     return calculateAllManagerAssignmentPeriods(

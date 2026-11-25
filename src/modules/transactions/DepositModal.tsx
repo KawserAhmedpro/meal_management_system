@@ -33,7 +33,7 @@ export const DepositModal: React.FC<DepositModalProps> = ({
   onSuccess,
 }) => {
   const { selectedMonth, saveDeposit } = useApp();
-  const members = useLiveQuery(() => db.members.orderBy('room').toArray(), []) || [];
+  const members = useLiveQuery(() => db.members.orderBy('room').filter((m) => !m._isDeleted).toArray(), []) || [];
   const [memberSearch, setMemberSearch] = useState('');
 
   const defaultDate = `${selectedMonth}-01`;
