@@ -57,6 +57,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setIsLoading(true);
     try {
       await adminLogout();
+      if (typeof sessionStorage !== 'undefined') {
+        sessionStorage.removeItem('dms_local_access_granted');
+      }
       setUser(null);
       setIsAdmin(false);
     } finally {

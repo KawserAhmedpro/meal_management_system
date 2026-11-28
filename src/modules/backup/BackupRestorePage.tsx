@@ -11,6 +11,10 @@ import { Card, CardHeader, CardContent } from '../../components/ui/Card';
 import { Badge } from '../../components/ui/Badge';
 import { Modal } from '../../components/ui/Modal';
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog';
+import { generateOperationId, getClientInstanceId } from '../../services/dataGateway';
+import { COLLECTIONS } from '../../services/firestore';
+import { outboxFlusher } from '../../services/outboxFlusher';
+import { OutboxOperation } from '../../types';
 import {
   Database,
   Download,
@@ -23,6 +27,59 @@ import {
   HardDrive,
   FileJson,
 } from 'lucide-react';
+
+function prepareRestoredEntitiesAndOutbox<T extends { id: string; [key: string]: any }>(
+  collectionName: string,
+  items: T[],
+  clientId: string,
+  now: number
+): { preparedItems: T[]; outboxOps: OutboxOperation<T>[] } {
+  const preparedItems: T[] = [];
+  const outboxOps: OutboxOperation<T>[] = [];
+
+  for (const item of items) {
+    if (!item.id) continue;
+    const opId = generateOperationId(collectionName, item.id);
+    const prevVersion = typeof item._version === 'number' ? item._version : 0;
+    const nextVersion = prevVersion + 1;
+    const isDeleted = Boolean(item._isDeleted);
+
+    const mutated: T = {
+      ...item,
+      _version: nextVersion,
+      _lastOpId: opId,
+      _lastModifiedLocally: now,
+      _isDeleted: isDeleted,
+      ...(isDeleted
+        ? { _deletedAt: item._deletedAt || now, _deletedVersion: nextVersion }
+        : { _deletedAt: null, _deletedVersion: null }
+      ),
+    };
+
+    const outboxItem: OutboxOperation<T> = {
+      opId,
+      collectionName,
+      entityId: item.id,
+      operationType: isDeleted ? 'SOFT_DELETE' : 'UPSERT',
+      payload: mutated,
+      prevEntityVersion: prevVersion,
+      localVersion: nextVersion,
+      clientId,
+      status: 'pending',
+      retryCount: 0,
+      createdAt: now,
+      updatedAt: now,
+      leaseToken: null,
+      leaseExpiresAt: null,
+      error: null,
+    };
+
+    preparedItems.push(mutated);
+    outboxOps.push(outboxItem);
+  }
+
+  return { preparedItems, outboxOps };
+}
 
 export const BackupRestorePage: React.FC = () => {
   const { settings, updateSettings, selectedMonth } = useApp();
@@ -156,25 +213,44 @@ export const BackupRestorePage: React.FC = () => {
           console.warn('[Backup] Unable to save local safety snapshot before replace:', snapshotErr);
         }
 
+        const now = Date.now();
+        const clientId = getClientInstanceId();
+
+        const prepMembers = prepareRestoredEntitiesAndOutbox(COLLECTIONS.MEMBERS, resMembers, clientId, now);
+        const prepMeals = prepareRestoredEntitiesAndOutbox(COLLECTIONS.MEAL_ENTRIES, resMealEntries, clientId, now);
+        const prepExpenses = prepareRestoredEntitiesAndOutbox(COLLECTIONS.EXPENSES, resExpenses, clientId, now);
+        const prepDeposits = prepareRestoredEntitiesAndOutbox(COLLECTIONS.DEPOSITS, resDeposits, clientId, now);
+        const prepCategories = prepareRestoredEntitiesAndOutbox(COLLECTIONS.CATEGORIES, resCategories, clientId, now);
+
+        const allOutboxOps = [
+          ...prepMembers.outboxOps,
+          ...prepMeals.outboxOps,
+          ...prepExpenses.outboxOps,
+          ...prepDeposits.outboxOps,
+          ...prepCategories.outboxOps,
+        ];
+
         await db.transaction(
           'rw',
-          [db.members, db.mealEntries, db.expenses, db.deposits, db.categories, db.sequence_counters],
+          [db.members, db.mealEntries, db.expenses, db.deposits, db.categories, db.sequence_counters, db.sync_outbox],
           async () => {
             await db.members.clear();
             await db.mealEntries.clear();
             await db.expenses.clear();
             await db.deposits.clear();
             await db.categories.clear();
+            await db.sync_outbox.clear();
 
-            if (resMembers.length) await db.members.bulkAdd(resMembers);
-            if (resMealEntries.length) await db.mealEntries.bulkAdd(resMealEntries);
-            if (resExpenses.length) await db.expenses.bulkAdd(resExpenses);
-            if (resDeposits.length) await db.deposits.bulkAdd(resDeposits);
-            if (resCategories.length) await db.categories.bulkAdd(resCategories);
+            if (prepMembers.preparedItems.length) await db.members.bulkAdd(prepMembers.preparedItems);
+            if (prepMeals.preparedItems.length) await db.mealEntries.bulkAdd(prepMeals.preparedItems);
+            if (prepExpenses.preparedItems.length) await db.expenses.bulkAdd(prepExpenses.preparedItems);
+            if (prepDeposits.preparedItems.length) await db.deposits.bulkAdd(prepDeposits.preparedItems);
+            if (prepCategories.preparedItems.length) await db.categories.bulkAdd(prepCategories.preparedItems);
+            if (allOutboxOps.length) await db.sync_outbox.bulkAdd(allOutboxOps);
 
             // Reconcile sequence counter without ever decreasing it (prevents sequence regression)
             let maxRestoredNum = 0;
-            for (const m of resMembers) {
+            for (const m of prepMembers.preparedItems) {
               const match = m.id && m.id.match(/^MEM-(\d+)$/i);
               if (match) {
                 const num = parseInt(match[1], 10);
@@ -192,19 +268,37 @@ export const BackupRestorePage: React.FC = () => {
         );
       } else {
         // Merge mode
+        const now = Date.now();
+        const clientId = getClientInstanceId();
+
+        const prepMembers = prepareRestoredEntitiesAndOutbox(COLLECTIONS.MEMBERS, resMembers, clientId, now);
+        const prepMeals = prepareRestoredEntitiesAndOutbox(COLLECTIONS.MEAL_ENTRIES, resMealEntries, clientId, now);
+        const prepExpenses = prepareRestoredEntitiesAndOutbox(COLLECTIONS.EXPENSES, resExpenses, clientId, now);
+        const prepDeposits = prepareRestoredEntitiesAndOutbox(COLLECTIONS.DEPOSITS, resDeposits, clientId, now);
+        const prepCategories = prepareRestoredEntitiesAndOutbox(COLLECTIONS.CATEGORIES, resCategories, clientId, now);
+
+        const allOutboxOps = [
+          ...prepMembers.outboxOps,
+          ...prepMeals.outboxOps,
+          ...prepExpenses.outboxOps,
+          ...prepDeposits.outboxOps,
+          ...prepCategories.outboxOps,
+        ];
+
         await db.transaction(
           'rw',
-          [db.members, db.mealEntries, db.expenses, db.deposits, db.categories, db.sequence_counters],
+          [db.members, db.mealEntries, db.expenses, db.deposits, db.categories, db.sequence_counters, db.sync_outbox],
           async () => {
-            if (resMembers.length) await db.members.bulkPut(resMembers);
-            if (resMealEntries.length) await db.mealEntries.bulkPut(resMealEntries);
-            if (resExpenses.length) await db.expenses.bulkPut(resExpenses);
-            if (resDeposits.length) await db.deposits.bulkPut(resDeposits);
-            if (resCategories.length) await db.categories.bulkPut(resCategories);
+            if (prepMembers.preparedItems.length) await db.members.bulkPut(prepMembers.preparedItems);
+            if (prepMeals.preparedItems.length) await db.mealEntries.bulkPut(prepMeals.preparedItems);
+            if (prepExpenses.preparedItems.length) await db.expenses.bulkPut(prepExpenses.preparedItems);
+            if (prepDeposits.preparedItems.length) await db.deposits.bulkPut(prepDeposits.preparedItems);
+            if (prepCategories.preparedItems.length) await db.categories.bulkPut(prepCategories.preparedItems);
+            if (allOutboxOps.length) await db.sync_outbox.bulkPut(allOutboxOps);
 
             // Reconcile sequence counter monotonically
             let maxRestoredNum = 0;
-            for (const m of resMembers) {
+            for (const m of prepMembers.preparedItems) {
               const match = m.id && m.id.match(/^MEM-(\d+)$/i);
               if (match) {
                 const num = parseInt(match[1], 10);
@@ -221,6 +315,9 @@ export const BackupRestorePage: React.FC = () => {
           }
         );
       }
+
+      // Trigger sync so restored data flushes to cloud without delay
+      outboxFlusher.triggerSync();
 
       setJsonPreview(null);
       setIsConfirmRestoreOpen(false);
@@ -253,39 +350,64 @@ export const BackupRestorePage: React.FC = () => {
     if (!excelPreview) return;
     setIsImportingExcel(true);
     try {
-      await db.transaction('rw', [db.members, db.mealEntries, db.expenses, db.deposits, db.sequence_counters], async () => {
-        if (excelPreview.members.length > 0) {
-          await db.members.bulkPut(excelPreview.members);
-        }
-        if (excelPreview.mealEntries.length > 0) {
-          await db.mealEntries.bulkPut(excelPreview.mealEntries);
-        }
-        if (excelPreview.expenses.length > 0) {
-          await db.expenses.bulkPut(excelPreview.expenses);
-        }
-        if (excelPreview.deposits.length > 0) {
-          await db.deposits.bulkPut(excelPreview.deposits);
-        }
+      const now = Date.now();
+      const clientId = getClientInstanceId();
 
-        // Reconcile sequence counter monotonically against imported Excel members
-        let maxExcelNum = 0;
-        for (const m of excelPreview.members) {
-          const match = m.id && m.id.match(/^MEM-(\d+)$/i);
-          if (match) {
-            const num = parseInt(match[1], 10);
-            if (!isNaN(num) && num > maxExcelNum) maxExcelNum = num;
+      const prepMembers = prepareRestoredEntitiesAndOutbox(COLLECTIONS.MEMBERS, excelPreview.members, clientId, now);
+      const prepMeals = prepareRestoredEntitiesAndOutbox(COLLECTIONS.MEAL_ENTRIES, excelPreview.mealEntries, clientId, now);
+      const prepExpenses = prepareRestoredEntitiesAndOutbox(COLLECTIONS.EXPENSES, excelPreview.expenses, clientId, now);
+      const prepDeposits = prepareRestoredEntitiesAndOutbox(COLLECTIONS.DEPOSITS, excelPreview.deposits, clientId, now);
+
+      const excelOutboxOps = [
+        ...prepMembers.outboxOps,
+        ...prepMeals.outboxOps,
+        ...prepExpenses.outboxOps,
+        ...prepDeposits.outboxOps,
+      ];
+
+      await db.transaction(
+        'rw',
+        [db.members, db.mealEntries, db.expenses, db.deposits, db.sequence_counters, db.sync_outbox],
+        async () => {
+          if (prepMembers.preparedItems.length > 0) {
+            await db.members.bulkPut(prepMembers.preparedItems);
+          }
+          if (prepMeals.preparedItems.length > 0) {
+            await db.mealEntries.bulkPut(prepMeals.preparedItems);
+          }
+          if (prepExpenses.preparedItems.length > 0) {
+            await db.expenses.bulkPut(prepExpenses.preparedItems);
+          }
+          if (prepDeposits.preparedItems.length > 0) {
+            await db.deposits.bulkPut(prepDeposits.preparedItems);
+          }
+          if (excelOutboxOps.length > 0) {
+            await db.sync_outbox.bulkPut(excelOutboxOps);
+          }
+
+          // Reconcile sequence counter monotonically against imported Excel members
+          let maxExcelNum = 0;
+          for (const m of prepMembers.preparedItems) {
+            const match = m.id && m.id.match(/^MEM-(\d+)$/i);
+            if (match) {
+              const num = parseInt(match[1], 10);
+              if (!isNaN(num) && num > maxExcelNum) maxExcelNum = num;
+            }
+          }
+          if (maxExcelNum > 0) {
+            const currentCounter = await db.sequence_counters.get('member_id');
+            const safeLastVal = Math.max(currentCounter?.lastValue || 0, maxExcelNum);
+            await db.sequence_counters.put({
+              id: 'member_id',
+              lastValue: safeLastVal,
+              updatedAt: Date.now(),
+            });
           }
         }
-        if (maxExcelNum > 0) {
-          const currentCounter = await db.sequence_counters.get('member_id');
-          const safeLastVal = Math.max(currentCounter?.lastValue || 0, maxExcelNum);
-          await db.sequence_counters.put({
-            id: 'member_id',
-            lastValue: safeLastVal,
-            updatedAt: Date.now(),
-          });
-        }
-      });
+      );
+
+      // Trigger cloud sync for imported Excel records
+      outboxFlusher.triggerSync();
 
       setStatusMessage({
         text: `Excel imported successfully: ${excelPreview.members.length} members, ${excelPreview.mealEntries.length} meals, ${excelPreview.expenses.length} expenses, ${excelPreview.deposits.length} deposits.`,

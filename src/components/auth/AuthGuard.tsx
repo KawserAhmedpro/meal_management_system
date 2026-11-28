@@ -7,8 +7,12 @@ export const AuthGuard: React.FC<{ children: React.ReactNode }> = ({ children })
   const { user, isAdmin, isLoading, isFirebaseConfigured } = useAuth();
   const location = useLocation();
 
-  // If Firebase is not configured yet, let user access local offline app so they aren't locked out
+  // If Firebase is not configured yet, require explicit acknowledgement via /login so protected routes aren't silently exposed
   if (!isFirebaseConfigured) {
+    const isLocalAcknowledged = typeof sessionStorage !== 'undefined' && sessionStorage.getItem('dms_local_access_granted') === 'true';
+    if (!isLocalAcknowledged) {
+      return <Navigate to="/login" state={{ from: location }} replace />;
+    }
     return <>{children}</>;
   }
 

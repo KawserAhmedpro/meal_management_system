@@ -61,6 +61,14 @@ export const ExpensesPage: React.FC = () => {
   }, [expenses, searchQuery, selectedCategory, startDate, endDate]);
 
   // Calculations
+  const daysInSelectedMonth = useMemo(() => {
+    const [yStr, mStr] = selectedMonth.split('-');
+    const year = parseInt(yStr, 10);
+    const monthNum = parseInt(mStr, 10);
+    if (isNaN(year) || isNaN(monthNum)) return 30;
+    return new Date(year, monthNum, 0).getDate();
+  }, [selectedMonth]);
+
   const totalCost = useMemo(() => {
     return filteredExpenses.reduce((sum, e) => sum + (e.amount || 0), 0);
   }, [filteredExpenses]);
@@ -147,9 +155,9 @@ export const ExpensesPage: React.FC = () => {
             <TrendingUp className="w-4 h-4 text-blue-600" />
           </div>
           <div className="mt-2 text-xl font-bold text-slate-900">
-            {formatCurrency(totalCost / 30, settings.currencySymbol)}
+            {formatCurrency(daysInSelectedMonth > 0 ? totalCost / daysInSelectedMonth : 0, settings.currencySymbol)}
           </div>
-          <p className="text-xs text-slate-500 mt-1">Estimated daily burn rate</p>
+          <p className="text-xs text-slate-500 mt-1">Estimated daily burn rate ({daysInSelectedMonth} days)</p>
         </Card>
       </div>
 

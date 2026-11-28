@@ -27,6 +27,12 @@ export const PrintCenterPage: React.FC = () => {
   );
   const isFullOff = Boolean(closure && !closure._isDeleted && closure.status === 'FULL_OFF');
 
+  // Distinct floors from active members
+  const floors = useMemo(() => {
+    const list = Array.from(new Set(members.map((m) => m.floor))).filter(Boolean);
+    return ['ALL', ...list.sort()];
+  }, [members]);
+
   // Group members by room
   const roomGroups = useMemo(() => {
     const map = new Map<string, Member[]>();
@@ -113,12 +119,11 @@ export const PrintCenterPage: React.FC = () => {
                 onChange={(e) => setSelectedFloor(e.target.value)}
                 className="text-xs py-2 px-3 rounded-xl border border-slate-200 bg-white focus:outline-none"
               >
-                <option value="ALL">All Floors ({roomGroups.length} Rooms)</option>
-                <option value="1st Floor">1st Floor</option>
-                <option value="2nd Floor">2nd Floor</option>
-                <option value="3rd Floor">3rd Floor</option>
-                <option value="4th Floor">4th Floor</option>
-                <option value="5th Floor">5th Floor</option>
+                {floors.map((fl) => (
+                  <option key={fl} value={fl}>
+                    {fl === 'ALL' ? `All Floors (${roomGroups.length} Rooms)` : fl}
+                  </option>
+                ))}
               </select>
             </div>
           </div>

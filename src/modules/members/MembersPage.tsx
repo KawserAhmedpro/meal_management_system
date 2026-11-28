@@ -40,6 +40,7 @@ export const MembersPage: React.FC = () => {
   const [memberToEdit, setMemberToEdit] = useState<Member | null>(null);
   const [profileMember, setProfileMember] = useState<Member | null>(null);
   const [memberToDelete, setMemberToDelete] = useState<Member | null>(null);
+  const [memberToToggle, setMemberToToggle] = useState<Member | null>(null);
 
   // Distinct floors from data
   const floors = useMemo(() => {
@@ -248,7 +249,7 @@ export const MembersPage: React.FC = () => {
                     </td>
                     <td className="py-3.5 px-4 text-center">
                       <button
-                        onClick={() => toggleStatus(m)}
+                        onClick={() => setMemberToToggle(m)}
                         title="Click to toggle Active / Inactive"
                         className="inline-flex items-center"
                       >
@@ -320,6 +321,27 @@ export const MembersPage: React.FC = () => {
         message={`Are you sure you want to delete ${memberToDelete?.name} (${memberToDelete?.room})? This will also remove all their associated meal records and deposit transactions.`}
         confirmText="Delete Member"
         variant="danger"
+      />
+
+      {/* Confirm Status Toggle Dialog */}
+      <ConfirmDialog
+        isOpen={!!memberToToggle}
+        onClose={() => setMemberToToggle(null)}
+        onConfirm={async () => {
+          if (!memberToToggle) return;
+          await toggleStatus(memberToToggle);
+          setMemberToToggle(null);
+        }}
+        title={`Mark ${memberToToggle?.name} as ${memberToToggle?.status === 'Active' ? 'Inactive' : 'Active'}?`}
+        message={`Are you sure you want to change ${memberToToggle?.name}'s status to ${
+          memberToToggle?.status === 'Active' ? 'Inactive' : 'Active'
+        }? ${
+          memberToToggle?.status === 'Active'
+            ? 'Inactive members are excluded from daily meal roll calls and active mess lists.'
+            : 'Active members will be included in daily meal roll calls and attendance sheets.'
+        }`}
+        confirmText={`Set as ${memberToToggle?.status === 'Active' ? 'Inactive' : 'Active'}`}
+        variant="warning"
       />
     </div>
   );

@@ -95,6 +95,11 @@ export interface DataContextType {
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
 
+const getCurrentYearMonth = (): string => {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+};
+
 export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user, isAdmin } = useAuth();
   const isCloudActive = Boolean(isFirebaseConfigured && user && isAdmin && firestore);
@@ -127,7 +132,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [syncDiagnostics, setSyncDiagnostics] = useState<SyncDiagnostics | null>(null);
 
   // UI state
-  const [selectedMonth, setSelectedMonthState] = useState<string>('2026-03');
+  const [selectedMonth, setSelectedMonthState] = useState<string>(() => getCurrentYearMonth());
   const [isPinLocked, setIsPinLocked] = useState<boolean>(false);
   const [globalSearch, setGlobalSearch] = useState<string>('');
   const [activeQuickModal, setActiveQuickModal] = useState<'meal' | 'expense' | 'deposit' | 'member' | null>(null);

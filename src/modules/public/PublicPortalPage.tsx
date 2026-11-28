@@ -40,6 +40,11 @@ import {
   formatMonthName,
 } from '../../utils/formatters';
 
+const getCurrentYearMonth = (): string => {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+};
+
 export const PublicPortalPage: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const urlMonth = searchParams.get('month');
@@ -50,7 +55,7 @@ export const PublicPortalPage: React.FC = () => {
   const [monthData, setMonthData] = useState<PublicMonthData | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isOnline, setIsOnline] = useState<boolean>(navigator.onLine);
-  const [selectedMonth, setSelectedMonth] = useState<string>(urlMonth || '2026-03');
+  const [selectedMonth, setSelectedMonth] = useState<string>(urlMonth || getCurrentYearMonth());
   const [selectedManagerId, setSelectedManagerId] = useState<string | null>(urlManager || null);
 
   // UI state

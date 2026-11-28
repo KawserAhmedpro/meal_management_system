@@ -80,7 +80,10 @@ export const LoginPage: React.FC = () => {
             <div className="pt-2">
               <button
                 type="button"
-                onClick={() => navigate('/')}
+                onClick={() => {
+                  sessionStorage.setItem('dms_local_access_granted', 'true');
+                  navigate('/');
+                }}
                 className="w-full py-2 px-3 bg-amber-600 hover:bg-amber-500 text-slate-950 font-bold rounded-xl transition text-xs flex items-center justify-center gap-1.5"
               >
                 Continue in Local IndexedDB Mode

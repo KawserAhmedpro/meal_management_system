@@ -14,13 +14,14 @@ import { QuickActions } from './QuickActions';
 import { DashboardCharts } from './DashboardCharts';
 import { RecentExpenses } from './RecentExpenses';
 import { RecentDeposits } from './RecentDeposits';
-import { Calendar, Building, MapPin, Globe, Share2, ExternalLink } from 'lucide-react';
+import { Calendar, Building, MapPin, Globe, Share2, ExternalLink, Check } from 'lucide-react';
 
 export const DashboardPage: React.FC = () => {
   const { selectedMonth, settings, publicPortalUrl } = useApp();
 
   // Selected manager ID for controlling the entire dashboard
   const [selectedManagerId, setSelectedManagerId] = useState<string>('');
+  const [copiedPortal, setCopiedPortal] = useState(false);
 
   // Reactive live queries from IndexedDB (exclude soft-deleted tombstones)
   const members = useLiveQuery(() => db.members.filter((m) => !m._isDeleted).toArray(), []) || [];
@@ -250,13 +251,23 @@ export const DashboardPage: React.FC = () => {
             onClick={() => {
               if (publicPortalUrl) {
                 navigator.clipboard.writeText(publicPortalUrl);
-                alert('Public Portal link copied to clipboard!\n' + publicPortalUrl);
+                setCopiedPortal(true);
+                setTimeout(() => setCopiedPortal(false), 2500);
               }
             }}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 transition shadow-xs"
           >
-            <Share2 className="w-3.5 h-3.5 text-emerald-600" />
-            <span>Copy Link</span>
+            {copiedPortal ? (
+              <>
+                <Check className="w-3.5 h-3.5 text-emerald-600" />
+                <span className="text-emerald-700">Copied!</span>
+              </>
+            ) : (
+              <>
+                <Share2 className="w-3.5 h-3.5 text-emerald-600" />
+                <span>Copy Link</span>
+              </>
+            )}
           </button>
           <a
             href={`${import.meta.env.BASE_URL}public`}
